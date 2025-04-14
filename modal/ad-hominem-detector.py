@@ -58,6 +58,7 @@ download_image = (
     .add_local_python_source("hardware")
     .add_local_python_source("resutls_processing")
     .add_local_python_source("progress_bar")
+    .add_local_python_source("key")
     
 )
 
@@ -402,17 +403,19 @@ def run_all_evaluations():
     import pandas as pd
     from promt_en import prompt as PROMPT_TEMPLATE_EN
     from promt_nl import prompt as PROMPT_TEMPLATE_NL
+    from key import hf_token
 
 
     repo_id = "TheBloke/deepseek-llm-7B-chat-GGUF"
     df = pd.read_csv("sample_data_english.csv")
     df_nl = pd.read_csv("sample_data_dutch.csv")
+
     sampled_df = df.sample(n=10, random_state=42)
     detect_ad_hominem.remote(
         sampled_df, PROMPT_TEMPLATE_EN,
         "google/gemma-3-27b-pt-qat-q4_0-gguf","Q4_0",
         dataset_language="EN", prompt_language="EN", dataset_nick_name="US_election",
-        prompt_nick_name="Davids-promt",hf_token="")
+        prompt_nick_name="Davids-promt",hf_token=hf_token)
 
 # "unsloth/Llama-4-Scout-17B-16E-Instruct-GGUF"
 # "unsloth/DeepSeek-R1-Distill-Qwen-32B-GGUF"
