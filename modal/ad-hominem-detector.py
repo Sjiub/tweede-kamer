@@ -82,8 +82,10 @@ def download_model(repo_id: str, revision=None, quant: str = "Q8_0", hf_token= N
     print("🦙 model loaded")
 
     if gguf_files:
-        preferred = [f for f in gguf_files if quant.lower() in f]
+        preferred = [f for f in gguf_files if quant.lower() or quant in f]
         if not preferred:
+            # Check if capital letters is the issue:
+            preferred = [f for f in gguf_files if quant or quant in f]
             raise FileNotFoundError(f"No GGUF file found for quant '{quant}'")
 
         return preferred[0]
@@ -409,14 +411,41 @@ def run_all_evaluations():
     repo_id = "TheBloke/deepseek-llm-7B-chat-GGUF"
     df = pd.read_csv("sample_data_english.csv")
     df_nl = pd.read_csv("sample_data_dutch.csv")
+    # Sample indices from one of the dataframes
+    sampled_indices = df.sample(n=10, random_state=42).index
 
-    sampled_df = df.sample(n=10, random_state=42)
-    detect_ad_hominem.remote(
-        sampled_df, PROMPT_TEMPLATE_EN,
-        "google/gemma-3-27b-pt-qat-q4_0-gguf","Q4_0",
+    # Use the same indices to sample both dataframes
+    sampled_en = df.loc[sampled_indices]
+    sampled_nl = df_nl.loc[sampled_indices]
+
+    def run_english_test(model, quant):
+        detect_ad_hominem.remote(
+        sampled_en, PROMPT_TEMPLATE_EN,
+        model,quant,
         dataset_language="EN", prompt_language="EN", dataset_nick_name="US_election",
         prompt_nick_name="Davids-promt",hf_token=hf_token)
+    def run_dutch_test(model, quant):
+        detect_ad_hominem.remote(
+        sampled_nl, PROMPT_TEMPLATE_NL,
+        model,quant,
+        dataset_language="NL", prompt_language="NL", dataset_nick_name="US_election",
+        prompt_nick_name="Davids-promt",hf_token=hf_token)
+    
 
+    # detect_ad_hominem.remote(
+    #     sampled_df, PROMPT_TEMPLATE_EN,
+    #     "google/gemma-3-27b-pt-qat-q4_0-gguf","Q4_0",
+    #     dataset_language="EN", prompt_language="EN", dataset_nick_name="US_election",
+    #     prompt_nick_name="Davids-promt",hf_token=hf_token)
+    # run_english_test("BramVanroy/GEITje-7B-ultra-GGUF", "Q8_0")
+    # run_dutch_test("BramVanroy/GEITje-7B-ultra-GGUF", "Q8_0")
+    # run_english_test("XelotX/DeepSeek-R1-Distill-Llama-8B-GGUF", "Q8_0")
+    # run_dutch_test("XelotX/DeepSeek-R1-Distill-Llama-8B-GGUF", "Q8_0")
+
+    run_dutch_test("unsloth/phi-4-GGUF", "Q8_0")
+    run_english_test("unsloth/phi-4-GGUF", "Q8_0")
+
+    
 # "unsloth/Llama-4-Scout-17B-16E-Instruct-GGUF"
 # "unsloth/DeepSeek-R1-Distill-Qwen-32B-GGUF"
 # https://huggingface.co/unsloth/DeepSeek-R1-Distill-Qwen-32B-GGUF -> watch out for prompt template

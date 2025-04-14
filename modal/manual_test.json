@@ -1,0 +1,143 @@
+{
+    "Ad-hominem-tests": [
+        "What does this mean in real life? Well, the other day, Vice President Bush disclosed his tax returns to the American people. He's one of the wealthiest Americans, and he's our Vice President. In 1981 I think he paid about 40 percent in taxes. In 1983, as a result of these tax preferences, he paid a little over 12 percent, 12.8 percent in taxes. That meant that he paid a lower percent in taxes than the janitor who cleaned up his office or the chauffeur who drives him to work. I believe we need some fairness.",
+        "Could I just respond to this, please? Hillary Clinton, in terms of having people come into our country, we have many criminal illegal aliens. When we want to send them back to their country, their country says we don’t want them.",
+        "In fact, it would be the most extreme version, the biggest tax cuts for the top percent of the people in this country than we've ever had. I call it trumped - up trickle - down, because that's exactly what it would be. That is not how we grow the economy.",
+        "And yet that very committee of which I am chairman has been handicapped by the fact that we have not had adequate funds; we have not had adequate powers; we haven't had an adequate staff. Now in the special session of Congress and also in the session that preceded it, the Democratic Congress - in which there's a two - to - one Democratic majority - was asked by the President to give us the funds and give us the power to do a job and they did nothing at all, And in the special session in which Senator Kennedy was calling the signals, along with Senator Johnson, they turned it down and he himself voted against giving us the powers despite the fact that the bill had already been considered before, that it already had hearings on, and the Congress already knew what it had before it. All that I can say is this: what we need here are not just high hopes."
+    ],
+    "tests": [
+        {
+            "model": "chatgpt-4o",
+            "results": [
+                {
+                    "found_fallacy": [],
+                    "summary": {
+                        "count": 0,
+                        "average_confidence": 0.0,
+                        "highest_confidence": 0.0,
+                        "lowest_confidence": 0.0
+                    }
+                },
+                {
+                    "found_fallacy": [],
+                    "summary": {
+                    "count": 0,
+                    "average_confidence": 0.0,
+                    "highest_confidence": 0.0,
+                    "lowest_confidence": 0.0
+                    }
+                },
+                {
+                    "found_fallacy": [],
+                    "summary": {
+                    "count": 0,
+                    "average_confidence": 0.0,
+                    "highest_confidence": 0.0,
+                    "lowest_confidence": 0.0
+                    }
+                },
+                {
+                    "found_fallacy": [
+                      {
+                        "quote": "Senator Kennedy was calling the signals, along with Senator Johnson, they turned it down and he himself voted against giving us the powers despite the fact that the bill had already been considered before...",
+                        "explanation": "This implies that Kennedy, despite knowing better, deliberately undermined the committee, suggesting a personal motive or irresponsibility rather than addressing his rationale for the vote.",
+                        "confidence": 0.75,
+                        "context": "The speaker frames the failure of the committee as the result of Kennedy's personal decision to vote against the bill, implying obstruction or bad faith rather than engaging with his legislative reasoning."
+                      }
+                    ],
+                    "summary": {
+                      "count": 1,
+                      "average_confidence": 0.75,
+                      "highest_confidence": 0.75,
+                      "lowest_confidence": 0.75
+                    }
+                }
+            ]
+        },
+        {
+            "model": "Mistral-large",
+            "results": [
+                {
+                    "found_fallacy": [],
+                    "summary": {
+                      "count": 0,
+                      "average_confidence": 0.0,
+                      "highest_confidence": 0.0,
+                      "lowest_confidence": 0.0
+                    }
+                  },
+                  {
+                    "found_fallacy": [],
+                    "summary": {
+                      "count": 0,
+                      "average_confidence": 0.0,
+                      "highest_confidence": 0.0,
+                      "lowest_confidence": 0.0
+                    }
+                  },
+                  {
+                    "found_fallacy": [],
+                    "summary": {
+                    "count": 0,
+                    "average_confidence": 0.0,
+                    "highest_confidence": 0.0,
+                    "lowest_confidence": 0.0
+                    }
+                },
+                {
+                    "found_fallacy": [],
+                    "summary": {
+                      "count": 0,
+                      "average_confidence": 0.0,
+                      "highest_confidence": 0.0,
+                      "lowest_confidence": 0.0
+                    }
+                  }
+                  
+                  
+            ]
+        },
+        {
+            "model": "deepseek-v3",
+            "results": [
+                {
+                    "found_fallacy": [],
+                    "summary": {
+                    "count": 0,
+                    "average_confidence": 0.0,
+                    "highest_confidence": 0.0,
+                    "lowest_confidence": 0.0
+                    }
+                },
+                {
+                    "found_fallacy": [],
+                    "summary": {
+                    "count": 0,
+                    "average_confidence": 0.0,
+                    "highest_confidence": 0.0,
+                    "lowest_confidence": 0.0
+                    }
+                },
+                {
+                    "found_fallacy": [],
+                    "summary": {
+                    "count": 0,
+                    "average_confidence": 0.0,
+                    "highest_confidence": 0.0,
+                    "lowest_confidence": 0.0
+                    }
+                },
+                {
+                    "found_fallacy": [],
+                    "summary": {
+                    "count": 0,
+                    "average_confidence": 0.0,
+                    "highest_confidence": 0.0,
+                    "lowest_confidence": 0.0
+                    }
+                }
+            ]
+        }
+
+    ]
+}
