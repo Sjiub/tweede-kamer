@@ -65,9 +65,6 @@ class PDF(FPDF):
         if show_predicted_label:
             self.cell(40, 8, "Predicted Label:", ln=False)
             self.cell(0, 8, str(test_data["predicted"]), ln=True)
-
-  
-        print("test_data: ", test_data)
     
         if show_clean_output:
             self.ln(2)
@@ -85,8 +82,7 @@ class PDF(FPDF):
             except Exception as e:
                 print(f"JSON formatting error: {e}")
                 cleaned_json = str(test_data["result"])
-            print("parsed: ", parsed)
-            print("cleaned_json: ", cleaned_json)
+
             self.set_font("DejaVu", size=9)
             line_height = 5
             lines = wrap_json_for_pdf(cleaned_json, width=100)
@@ -101,20 +97,6 @@ class PDF(FPDF):
                     self.add_page()
                 self.cell(0, line_height, line, ln=True)
             self.ln(3)
-
-        # if show_raw_output:
-        #     self.ln(2)
-        #     self.set_font("DejaVu", "B", 11)
-        #     self.cell(0, 8, "Raw Output:", ln=True)
-
-        #     try:
-        #         raw_json = json.dumps(json.loads(test_data["raw_output"]), indent=2, ensure_ascii=False)
-        #     except:
-        #         raw_json = str(test_data["raw_output"])
-
-        #     self.set_font("DejaVu", size=9)
-        #     self.multi_cell(0, 5, raw_json)
-        #     self.ln(5)
 
 def add_colored_json(pdf, json_obj):
     import re
