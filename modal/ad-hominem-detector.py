@@ -28,6 +28,7 @@ results_dir = "/root/results"
 # It was in an infinite loop of talking with itself. The issue was ofcourse,
 # that the prompt template was not automatically resolved, llama-cpp-python, however, could automatically
 # resolve that.
+typst_version="v0.13.1"
 download_image = (
     modal.Image.from_registry(f"nvidia/cuda:12.1.1-cudnn8-devel-ubuntu22.04", add_python="3.12")
     .apt_install(
@@ -42,8 +43,22 @@ download_image = (
     ])
     # Install other deps
     .pip_install("torch","pandas", "numpy", "huggingface_hub[hf_transfer]==0.26.2",
-        "transformers", "sentencepiece", "scikit-learn", "seaborn", "matplotlib", "fpdf2" )
+        "transformers", "sentencepiece", "scikit-learn", "seaborn", "matplotlib", 
+        "fpdf2", "ollama" )
+    .apt_install("curl", "systemctl")
+    .run_commands([
+        "curl -fsSL https://ollama.com/install.sh | sh"
+    ])
+    .run_commands([
+    # Step 2: Download Typst binary (Linux x86_64 MUSL build)
+    f"curl -L -o typst.tar.xz https://github.com/typst/typst/releases/download/{typst_version}/typst-x86_64-unknown-linux-musl.tar.xz",
 
+    # Step 3: Extract the archive
+    "tar -xf typst.tar.xz",
+
+    # Step 4: Move the binary to your system path
+    "mv typst-x86_64-unknown-linux-musl/typst /usr/local/bin/"
+    ])
     .entrypoint([])
     .env({"LD_LIBRARY_PATH":"/app/:$LD_LIBRARY_PATH"},)
     .env({"HUGGINGFACE_HUB_TOKEN":"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"})
@@ -53,10 +68,11 @@ download_image = (
     .add_local_file("sample_data_dutch.csv", remote_path="/root/sample_data_dutch.csv")
     .add_local_file("DejaVuSans.ttf", remote_path="/root/DejaVuSans.ttf")
     .add_local_file("DejaVuSans-Bold.ttf", remote_path="/root/DejaVuSans-Bold.ttf")
+    .add_local_file("ollama.service", remote_path= "/etc/systemd/system/ollama.service")
     .add_local_python_source("promt_en", )
     .add_local_python_source("promt_nl", )
     .add_local_python_source("hardware")
-    .add_local_python_source("resutls_processing")
+    .add_local_python_source("typst_report")
     .add_local_python_source("progress_bar")
     .add_local_python_source("key")
     
@@ -92,6 +108,27 @@ def download_model(repo_id: str, revision=None, quant: str = "Q8_0", hf_token= N
     else:
         raise FileNotFoundError("No GGUF file found in the downloaded model directory.")
 
+# @app.function(
+#     image=download_image, volumes={"/root/.ollama": model_cache}, timeout=60 * 10,
+# )
+def download_ollama_model(model: str):
+    #https://modal.com/blog/how_to_run_ollama_article
+    import os
+    import subprocess
+    import time
+
+    subprocess.run(["systemctl", "start", "ollama"])
+    # Start Ollama in the background
+    #process = subprocess.Popen(["ollama", "serve"])
+
+    # Optional: wait a moment for server to boot
+    import time
+    time.sleep(2)
+
+    import ollama
+    ollama.pull(model)
+    
+
 # -------------------- RUN LLAMA.CPP -------------------- #
 
 def llama_cpp_inference(llm, gguf_path: str, prompt: str, n_predict: int = -1,DEBUG=False):
@@ -110,6 +147,19 @@ def llama_cpp_inference(llm, gguf_path: str, prompt: str, n_predict: int = -1,DE
         #temperature=0,
     )
     return response["choices"][0]["message"]["content"]
+def ollama_inference(model,msg):
+    import ollama
+    import os
+    #os.environ['OLLAMA_MODELS'] = cache_dir
+
+    # Run inference with a model (e.g., llama3)
+    response = ollama.chat(
+        model=model,
+        messages=[
+            {'role': 'user', 'content': msg}
+        ]
+    )
+    return response['message']['content']
 
 # -------------------- Helper -------------------- #
 def clean_result(text: str):
@@ -121,16 +171,31 @@ def clean_result(text: str):
     """
     import json
     import ast
+    import re
+    text = str(text).strip()
+     # Try to extract JSON block from markdown-style ```json ... ``` block
+    if re.search(r'```json\b', text, re.IGNORECASE):
+        try:
+            match = re.search(r'```json\s*(.*?)\s*```', text, re.DOTALL | re.IGNORECASE)
+            if match:
+                json_str = match.group(1).strip()
+                return json.loads(json_str)
+        except Exception:
+            pass
+
+    # Try raw JSON
     try:
         return json.loads(text)
-    except Exception as e:
-        try:
-            json_start = text.find('json') + len('json')
-            json_end = text.rfind('```')
-            json_str = text[json_start:json_end].strip()
-            return json.loads(text)
-        except:
-            return ast.literal_eval(text)
+    except Exception:
+        pass
+
+    # Try using ast.literal_eval for single-quoted "JSON"
+    try:
+        return ast.literal_eval(text)
+    except Exception:
+        pass
+
+    raise ValueError("Unable to parse JSON from text.")
 
 def get_gpu_power():
     """
@@ -164,10 +229,10 @@ cache_dir = "/root/.cache/llama.cpp"
     timeout=60 * 60,
     volumes={
         results_dir: results,
-        cache_dir: model_cache
+        cache_dir: model_cache,
         },
     gpu=GPU_CONFIG)
-def run_pipeline(repo_id, query, prompt, quant="Q8_0", hf_token=None, DEBUG=False):
+def run_pipeline(repo_id, query, prompt, quant="Q8_0", ollama=False, hf_token=None, DEBUG=False):
     """
         Method to run inference on a model.
         `repo_id` is the huggingface link to a gguf compatibale model.
@@ -181,6 +246,7 @@ def run_pipeline(repo_id, query, prompt, quant="Q8_0", hf_token=None, DEBUG=Fals
     import threading
     from llama_cpp import Llama
     from progress_bar import storming_progress_bar
+    import subprocess
 
     print("🚀 Starting pipeline...")
     monitor = threading.Thread(target=monitor_power, daemon=True)
@@ -188,26 +254,34 @@ def run_pipeline(repo_id, query, prompt, quant="Q8_0", hf_token=None, DEBUG=Fals
     start_time = time.time()
 
     # Initialise llm
-    gguf_path = download_model.remote(repo_id,quant=quant, hf_token=hf_token)
-    llm = Llama(model_path=gguf_path, n_gpu_layers=-1, n_ctx=4096, verbose=DEBUG)
+    if ollama:
+        # starts the ollama 
+        download_ollama_model(repo_id)
+        #process = subprocess.Popen(["ollama", "serve"])
+    else:
+        gguf_path = download_model.remote(repo_id,quant=quant, hf_token=hf_token)
+        llm = Llama(model_path=gguf_path, n_gpu_layers=-1, n_ctx=4096, verbose=DEBUG)
 
     inference = []
     for idx, row in enumerate(query):
         storming_progress_bar(idx, len(query), start_time, update_message=f'Row: {idx}')
         _prompt = prompt
         full_prompt = _prompt.format(text=row)
+        
+        if ollama:
+            result = ollama_inference(repo_id, full_prompt)
+        else:
+            result = llama_cpp_inference(llm, gguf_path, full_prompt)
 
-        result = llama_cpp_inference(llm, gguf_path, full_prompt)
+        # # #Calculate tokens
+        # input_tokens = llm.tokenize(full_prompt.encode("utf-8"))
+        # input_token_count = len(input_tokens)
 
-        # #Calculate tokens
-        input_tokens = llm.tokenize(full_prompt.encode("utf-8"))
-        input_token_count = len(input_tokens)
+        # output_tokens = llm.tokenize(result.encode("utf-8"))
+        # output_token_count = len(output_tokens)
 
-        output_tokens = llm.tokenize(result.encode("utf-8"))
-        output_token_count = len(output_tokens)
-
-        energy = (input_token_count + output_token_count) / 1000 * GPU_INFO[GPU_CONFIG]["energy"]
-
+        # energy = (input_token_count + output_token_count) / 1000 * GPU_INFO[GPU_CONFIG]["energy"]
+        energy = 0
         try:
             parsed = clean_result(result)
         except Exception as e:
@@ -227,13 +301,14 @@ def run_pipeline(repo_id, query, prompt, quant="Q8_0", hf_token=None, DEBUG=Fals
     energy_measured = avg_power * duration
 
     df = pd.DataFrame(inference)
+    cost = duration* GPU_INFO[GPU_CONFIG]["price_per_sec"]
     energy_by_token = df["energy_by_token"].sum()
     print(f"\n⏱️ Duration: {duration:.2f} for {len(query)} querys. Average computation time: {duration/len(query)}")
     print(f"⚡ Estimated power (by nvidia-smi): {energy_measured:.4f} W")
     print(f"🔋 Estimated power ( by tokenizer): { energy_by_token:.4f} W")
-    print(f"🤑 Cost: {duration* GPU_INFO[GPU_CONFIG]["price_per_sec"]:.2f} 💰")
+    print(f"🤑 Cost: {cost:.2f} 💰")
 
-    return inference, energy_measured, duration, power_samples
+    return inference, energy_measured, duration,cost, power_samples
 
 def compute_results(inference, df):
     import pandas as pd
@@ -259,14 +334,21 @@ def compute_results(inference, df):
 
     
 
-    def extract_predicted_lable(result):
+    def extract_predicted_label(result):
+        json
         try:
-            return "Ad Hominem" if result["summary"]["count"] > 0 else "No Ad Hominem"
-        except:
-            # This means the json was not parsed correctly
+            # If result is a string, try to load it
+            if isinstance(result, str):
+                result = json.loads(result)
+
+            count = result.get("summary", {}).get("count", 0)
+            print("➡️ Count value:", count)
+            return "Ad Hominem" if count > 0 else "No Ad Hominem"
+        except Exception as e:
+            # Optional: print(e) for debugging
             return "Unknown"
 
-    df["predicted"] = inference_df["result"].apply(extract_predicted_lable)
+    df["predicted"] = df["result"].apply(extract_predicted_label)
 
     len_unclassified = len(df[df["predicted"]== "Unknown"])
     df = df[df["predicted"] != "Unknown"]
@@ -274,7 +356,7 @@ def compute_results(inference, df):
     # Now make types consistent
     df["truth_label"] = df["Label"] != "No Ad Hominem"
     df["predicted"] = df["predicted"] != "No Ad Hominem"
-
+ 
     accuracy = accuracy_score(df["truth_label"], df["predicted"])
     print(f"🎯 Accuracy: {accuracy:.2%}")
     return df, accuracy, len_unclassified
@@ -326,22 +408,23 @@ def plot_power_samples(power_samples, output_path="power_usage_plot.png"):
     plt.close()
     return output_path
 @app.function(image=download_image,volumes={results_dir: results,},timeout=60 * 60,)
-def detect_ad_hominem(df, prompt, model,quant, dataset_language, prompt_language, dataset_nick_name, prompt_nick_name,hf_token):
+def detect_ad_hominem(df, prompt, model,quant, ollama, dataset_language, prompt_language, dataset_nick_name, prompt_nick_name,hf_token):
     import pandas as pd
     from datetime import datetime
     from zoneinfo import ZoneInfo
 
     querys = df["Speech"].to_list()
-    inference, energy_measured, duration, power_samples = run_pipeline.remote(
+    inference, energy_measured, duration, cost, power_samples = run_pipeline.remote(
          model,
          querys,
          prompt,
+         ollama=ollama,
          quant=quant,
          hf_token=hf_token
     )
     inference_df, accuracy, len_unparsed = compute_results(inference, df)
-    confusion_matrix_path = plot_confusion_matrix(inference_df, path=f'{results_dir}/confusion_matrix.png')
-    plot_power_path = plot_power_samples(power_samples, output_path=f'{results_dir}/power_plot.png')
+    confusion_matrix_path = plot_confusion_matrix(inference_df, path=f'confusion_matrix.png')
+    plot_power_path = plot_power_samples(power_samples, output_path=f'power_plot.png')
     generate_pdf(
         inference_df,
         prompt,
@@ -355,6 +438,7 @@ def detect_ad_hominem(df, prompt, model,quant, dataset_language, prompt_language
         len_unparsed,
         energy_measured,
         duration,
+        cost,
         power_samples,
         [confusion_matrix_path, plot_power_path])
     now=datetime.now(ZoneInfo(TIME_ZONE)).strftime("%Y-%m-%d %H:%M:%S")
@@ -364,16 +448,17 @@ def detect_ad_hominem(df, prompt, model,quant, dataset_language, prompt_language
     print("📁 Results saved to:", out_path)
 
 
-def generate_pdf(inference_df, prompt, dataset_language, prompt_language, dataset_nick_name, prompt_nick_name, model, quant, accuracy,len_unparsed, energy_measured, duration, power_samples,graph_paths ):
-    import resutls_processing as output_pdf
+def generate_pdf(inference_df, prompt, dataset_language, prompt_language, dataset_nick_name, prompt_nick_name, model, quant, accuracy,len_unparsed, energy_measured, duration, cost, power_samples,graph_paths ):
+    from typst_report import TypstReport, get_prompt_hash
     from datetime import datetime
     from zoneinfo import ZoneInfo
-    pdf = output_pdf.PDF()
-    pdf.add_page()
+
+    report = TypstReport()
+
 
     # Open csv file
     # Generate unique identifier
-    prompt_hash = str(output_pdf.get_prompt_hash(prompt))
+    prompt_hash = str(get_prompt_hash(prompt))
     now=datetime.now(ZoneInfo(TIME_ZONE)).strftime("%Y-%m-%d %H:%M:%S")
     info = [
             ("Model", model),
@@ -382,19 +467,20 @@ def generate_pdf(inference_df, prompt, dataset_language, prompt_language, datase
             ("Dataset", dataset_nick_name),
             ("Date & Time", now),
             ("Duration (s)", f"{duration:.2f}"),
+            ("Cost ($)", f"{cost:.2f}"),
             ("Accuracy", f"{accuracy:.2f}%"),
             ("Unparsed ", len_unparsed),
             ("n tests", len(inference_df)),
             ("Electricity Usage (W)", f"{energy_measured:.2f}")
         ]
-    pdf.add_general_info(info,graph_paths)
+    report.add_general_info(info,graph_paths)
 
-    inference_df["cleaned_output"] = inference_df["result"].apply(output_pdf.clean_result)
+    inference_df["cleaned_output"] = inference_df["result"].apply(clean_result)
     for _, test in inference_df.iterrows():
-        pdf.add_test(test)
-    path = f"results_{prompt_language}_{dataset_language}_{model}_{now}.pdf".replace("/","_")
+        report.add_test(test)
+    path = f"results_{prompt_language}_{dataset_language}_{model}_{now}".replace("/","_")
     out_path = os.path.join(results_dir, path)
-    pdf.output(out_path)
+    report.save(f"{out_path}.typ", f"{out_path}.pdf")
 
 @app.function(
     image=download_image,
@@ -412,7 +498,7 @@ def run_all_evaluations():
     df = pd.read_csv("sample_data_english.csv")
     df_nl = pd.read_csv("sample_data_dutch.csv")
     # Sample indices from one of the dataframes
-    sampled_indices = df.sample(n=10, random_state=42).index
+    sampled_indices = df.sample(n=2, random_state=42).index
 
     # Use the same indices to sample both dataframes
     sampled_en = df.loc[sampled_indices]
@@ -430,7 +516,12 @@ def run_all_evaluations():
         model,quant,
         dataset_language="NL", prompt_language="NL", dataset_nick_name="US_election",
         prompt_nick_name="Davids-promt",hf_token=hf_token)
-    
+    detect_ad_hominem.remote(
+        sampled_en, PROMPT_TEMPLATE_EN,
+        "deepseek-r1:8b", "",ollama=True,
+        dataset_language="EN", prompt_language="EN", dataset_nick_name="US_election",
+        prompt_nick_name="Davids-promt",hf_token=hf_token
+    )
 
     # detect_ad_hominem.remote(
     #     sampled_df, PROMPT_TEMPLATE_EN,
@@ -442,8 +533,8 @@ def run_all_evaluations():
     # run_english_test("XelotX/DeepSeek-R1-Distill-Llama-8B-GGUF", "Q8_0")
     # run_dutch_test("XelotX/DeepSeek-R1-Distill-Llama-8B-GGUF", "Q8_0")
 
-    run_dutch_test("unsloth/phi-4-GGUF", "Q8_0")
-    run_english_test("unsloth/phi-4-GGUF", "Q8_0")
+    # run_dutch_test("unsloth/phi-4-GGUF", "Q8_0")
+    # run_english_test("unsloth/phi-4-GGUF", "Q8_0")
 
     
 # "unsloth/Llama-4-Scout-17B-16E-Instruct-GGUF"
