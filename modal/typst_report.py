@@ -46,6 +46,19 @@ def clean_result(text: str):
         pass
 
     raise ValueError("Unable to parse JSON from text.")
+def escape_for_typst(text: str) -> str:
+    """
+    Escape special Typst characters so they display as raw text.
+    """
+    return (
+        text.replace("\\", "\\\\")   # escape backslash first
+            .replace("#", "\\#")     # Typst command indicator
+            .replace("$", "\\$")     # Math mode
+            .replace("{", "\\{")     # Group open
+            .replace("}", "\\}")     # Group close
+            .replace("[", "\\[")     # Bracket open
+            .replace("]", "\\]")     # Bracket close
+    )
 
 
 
@@ -77,7 +90,8 @@ class TypstReport:
         self.content += f"== Test {test_data.get('id', '-')}\n\n"
 
         if kwargs.get("show_speech", True):
-            self.content += f"*Speech:* {test_data['Speech']}\n\n"
+            speech = escape_for_typst(str(test_data['Speech']))
+            self.content += f"*Speech:* {speech}\n\n"
 
         if kwargs.get("show_true_label", True):
             self.content += f"*True Label:* {test_data['truth_label']}\n\n"

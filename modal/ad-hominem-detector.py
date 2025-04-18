@@ -342,7 +342,7 @@ def compute_results(inference, df):
                 result = json.loads(result)
 
             count = result.get("summary", {}).get("count", 0)
-            print("➡️ Count value:", count)
+
             return "Ad Hominem" if count > 0 else "No Ad Hominem"
         except Exception as e:
             # Optional: print(e) for debugging
@@ -467,8 +467,8 @@ def generate_pdf(inference_df, prompt, dataset_language, prompt_language, datase
             ("Dataset", dataset_nick_name),
             ("Date & Time", now),
             ("Duration (s)", f"{duration:.2f}"),
-            ("Cost ($)", f"{cost:.2f}"),
-            ("Accuracy", f"{accuracy:.2f}%"),
+            (r"Cost (\$)", f"{cost:.2f}"),
+            ("Accuracy", f"{(accuracy * 100):.2f}%"),
             ("Unparsed ", len_unparsed),
             ("n tests", len(inference_df)),
             ("Electricity Usage (W)", f"{energy_measured:.2f}")
@@ -498,7 +498,7 @@ def run_all_evaluations():
     df = pd.read_csv("sample_data_english.csv")
     df_nl = pd.read_csv("sample_data_dutch.csv")
     # Sample indices from one of the dataframes
-    sampled_indices = df.sample(n=2, random_state=42).index
+    sampled_indices = df.sample(n=50, random_state=42).index
 
     # Use the same indices to sample both dataframes
     sampled_en = df.loc[sampled_indices]
@@ -519,6 +519,18 @@ def run_all_evaluations():
     detect_ad_hominem.remote(
         sampled_en, PROMPT_TEMPLATE_EN,
         "deepseek-r1:8b", "",ollama=True,
+        dataset_language="EN", prompt_language="EN", dataset_nick_name="US_election",
+        prompt_nick_name="Davids-promt",hf_token=hf_token
+    )
+    detect_ad_hominem.remote(
+        sampled_en, PROMPT_TEMPLATE_EN,
+        "gemma3:27b", "",ollama=True,
+        dataset_language="EN", prompt_language="EN", dataset_nick_name="US_election",
+        prompt_nick_name="Davids-promt",hf_token=hf_token
+    )
+    detect_ad_hominem.remote(
+        sampled_en, PROMPT_TEMPLATE_EN,
+        "mistral-small3.1", "",ollama=True,
         dataset_language="EN", prompt_language="EN", dataset_nick_name="US_election",
         prompt_nick_name="Davids-promt",hf_token=hf_token
     )
