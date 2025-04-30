@@ -18,3 +18,5 @@ devenv.lock
 data/speeches2014-2024/party_affilliations_fixed/speeches_2014-2024_speakers_parties_fixed.csv
 modal/__pycache__/
 *.pyc
+modal/key.py
+modal/tweede kamer/key.py
