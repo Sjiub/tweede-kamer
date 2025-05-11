@@ -4,8 +4,28 @@ import subprocess
 import shutil
 import os
 
-from promt_en import prompt as PROMPT_TEMPLATE_EN
-from promt_nl import prompt as PROMPT_TEMPLATE_NL
+from prompt_en_zeroshot import prompt as PROMPT_ZEROSHOT_EN
+from prompt_en_fewshot import prompt as PROMPT_FEWSHOT_EN
+from prompt_en_CCoT import prompt as PROMPT_CCOT_EN
+
+# Add prompt configurations
+PROMPT_CONFIGS = {
+    "zeroshot": {
+        "prompt": PROMPT_ZEROSHOT_EN,
+        "name": "zeroshot",
+        "description": "Zero-shot prompt without examples"
+    },
+    "fewshot": {
+        "prompt": PROMPT_FEWSHOT_EN,
+        "name": "fewshot",
+        "description": "Few-shot prompt with examples"
+    },
+    "ccot": {
+        "prompt": PROMPT_CCOT_EN,
+        "name": "ccot",
+        "description": "Chain-of-thought prompt with reasoning steps"
+    }
+}
 
 def get_prompt_hash(prompt, length=8):
     import hashlib
@@ -118,41 +138,85 @@ class TypstReport:
 
 
 if __name__ == "__main__":
-    datasets = [
-        ("results/results_en_en_deepseek8b.csv", PROMPT_TEMPLATE_EN, "EN-Adhominem", "deepseek-r1:8b"),
-    ]
+    for prompt_type, config in PROMPT_CONFIGS.items():
+        datasets = [
+            (f"results/results_{prompt_type}_mistral.csv", config["prompt"], f"EN-Adhominem-{config['name']}", "mistral-small3.1")
+        ]
 
-    for csv_path, prompt_template, tag, model in datasets:
-        report = TypstReport()
-        df = pd.read_csv(csv_path)
-        prompt_hash = get_prompt_hash(prompt_template)
-        print("prompt_hash:", prompt_hash)
+        for csv_path, prompt_template, tag, model in datasets:
+            report = TypstReport()
+            try:
+                df = pd.read_csv(csv_path)
+                prompt_hash = get_prompt_hash(prompt_template)
+                
+                df["dataset_name"] = "Tweede Kamer Debate"
+                df["prompt_version"] = f"{tag}-{prompt_hash}"
+                df["model"] = model
+                df["cleaned_output"] = df["result"].apply(clean_result)
+                
+                from datetime import datetime
+                from zoneinfo import ZoneInfo
+                now = datetime.now(ZoneInfo("Europe/Amsterdam")).strftime("%Y-%m-%d %H:%M:%S")
+                
+                # Calculate metrics if possible
+                metrics = {}
+                if 'final_label' in df.columns:
+                    from sklearn.metrics import accuracy_score, precision_score, recall_score, f1_score
+                    
+                    # Extract predictions
+                    predictions = []
+                    for _, row in df.iterrows():
+                        try:
+                            result = clean_result(row['result'])
+                            if isinstance(result, dict) and 'found_fallacy' in result:
+                                predictions.append(1 if result['found_fallacy'] else 0)
+                            else:
+                                predictions.append(0)
+                        except:
+                            predictions.append(0)
+                    
+                    # Get true labels
+                    true_labels = df["final_label"].tolist()
+                    
+                    # Calculate metrics
+                    metrics['accuracy'] = accuracy_score(true_labels, predictions)
+                    metrics['precision'] = precision_score(true_labels, predictions, zero_division=0)
+                    metrics['recall'] = recall_score(true_labels, predictions, zero_division=0)
+                    metrics['f1'] = f1_score(true_labels, predictions, zero_division=0)
+                
+                info = [
+                    ("Model", model),
+                    ("Quantisation", "Q8_0"),
+                    ("Prompt Version", f'Mika-prompt_EN_{prompt_hash}'),
+                    ("Dataset", df["dataset_name"].iloc[0]),
+                    ("Date & Time", now),
+                    ("Duration (s)", f"{duration:.2f}"),
+                    ("Cost ($)", f"{cost:.2f}"),
+                    ("Electricity Usage (W)", f"{energy_measured:.2f}"),
+                    ("Unparsed", len_unparsed),
+                    ("n tests", len(df))
+                ]
+                
+                # Add metrics if available
+                if metrics:
+                    info.extend([
+                        ("Accuracy", f"{metrics['accuracy']:.4f}"),
+                        ("Precision", f"{metrics['precision']:.4f}"),
+                        ("Recall", f"{metrics['recall']:.4f}"),
+                        ("F1 Score", f"{metrics['f1']:.4f}")
+                    ])
+                
+                report.add_general_info(info, ["confusion_matrix.png", "power_plot.png"])
 
-        df["dataset_name"] = "US_Parlament_nl"
-        df["prompt_version"] = f"{tag}-{prompt_hash}"
-        df["model"] = model
-        df["cleaned_output"] = df["result"].apply(clean_result)
-        from datetime import datetime
-        from zoneinfo import ZoneInfo
-        now=datetime.now(ZoneInfo("Europe/Amsterdam")).strftime("%Y-%m-%d %H:%M:%S")
-        info = [
-                ("Model", "deepseek"),
-                ("Quantisation", "quant"),
-                ("Prompt Version", f'prompt_{prompt_hash}'),
-                ("Dataset", "dataset_nick_name"),
-                ("Date & Time", now),
-                ("Duration (s)", f"{"duration"}"),
-                ("Accuracy", f"{"accuracy"}%"),
-                ("Unparsed ", "len_unparsed"),
-                ("n tests", len("inference_df")),
-                ("Electricity Usage (W)", f"{"energy_measured"}")
-            ]
-        report.add_general_info(info,["image.png"])
+                for _, test in df.iterrows():
+                    report.add_test(test)
 
-        for _, test in df.iterrows():
-            report.add_test(test)
-
-        base_name = os.path.splitext(os.path.basename(csv_path))[0]
-        typst_file = f"{base_name}.typ"
-        pdf_file = f"{base_name}.pdf"
-        report.save(typst_file, pdf_file)
+                base_name = os.path.splitext(os.path.basename(csv_path))[0]
+                typst_file = f"{base_name}.typ"
+                pdf_file = f"{base_name}.pdf"
+                report.save(typst_file, pdf_file)
+                print(f"✅ Report generated: {pdf_file}")
+                
+            except Exception as e:
+                print(f"❌ Error generating report: {e}")
+                continue

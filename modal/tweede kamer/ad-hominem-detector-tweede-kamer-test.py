@@ -3,15 +3,36 @@ import os
 import glob
 import csv
 import json
+import pandas as pd
 from pathlib import Path
 from hardware import GPU_INFO
-from promt_en import prompt as PROMPT_TEMPLATE_EN
-from promt_nl import prompt as PROMPT_TEMPLATE_NL
+from prompt_en_zeroshot import prompt as PROMPT_ZEROSHOT_EN
+from prompt_en_fewshot import prompt as PROMPT_FEWSHOT_EN
+from prompt_en_CCoT import prompt as PROMPT_CCOT_EN
 
 # Specify name of program
 app = modal.App("ad-hominem-detector-tk")
 GPU_CONFIG = "L4"
 TIME_ZONE = "Europe/Amsterdam"
+
+# Define prompt configurations
+PROMPT_CONFIGS = {
+    "zeroshot": {
+        "prompt": PROMPT_ZEROSHOT_EN,
+        "name": "zeroshot",
+        "description": "Zero-shot prompt without examples or reasoning steps"
+    },
+    "fewshot": {
+        "prompt": PROMPT_FEWSHOT_EN,
+        "name": "fewshot",
+        "description": "Few-shot prompt with examples"
+    },
+    "ccot": {
+        "prompt": PROMPT_CCOT_EN,
+        "name": "ccot",
+        "description": "Chain-of-thought prompt with reasoning steps"
+    }
+}
 
 # Initialize volumes
 model_cache = modal.Volume.from_name("llamacpp-cache", create_if_missing=True)
@@ -23,7 +44,7 @@ results_dir = "/root/results"
 #Update relative path to CSV file
 CURRENT_DIR = Path(__file__).parent
 PROJECT_ROOT = CURRENT_DIR.parent.parent
-SPEECHES_PATH = str(PROJECT_ROOT / "data" / "translated data" / "speeches_translated_with_parties_fixed.csv")
+MERGED_ANNOTATIONS_PATH = str(PROJECT_ROOT / "data" / "labeled tweede kamer data" / "merged_annotations.csv")
 FONTS_PATH = CURRENT_DIR / "DejaVuSans.ttf"
 FONTS_BOLD_PATH = CURRENT_DIR / "DejaVuSans-Bold.ttf"
 # -------------------- IMAGE -------------------- #
@@ -49,7 +70,7 @@ download_image = (
     # Install other deps
     .pip_install("torch","pandas", "numpy", "huggingface_hub[hf_transfer]==0.26.2",
         "transformers", "sentencepiece", "scikit-learn", "seaborn", "matplotlib", 
-        "fpdf2", "ollama" )
+        "fpdf2", "ollama", "openpyxl")
     .apt_install("curl", "systemctl")
     .run_commands([
         "curl -fsSL https://ollama.com/install.sh | sh"
@@ -69,11 +90,13 @@ download_image = (
     .env({"HUGGINGFACE_HUB_TOKEN":"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"})
     # Add files
     #.add_local_dir(".", remote_path="/root/ad-hominem")
-    .add_local_file(str(SPEECHES_PATH), 
-                   remote_path="/root/speeches_translated_with_parties_fixed.csv")
+    .add_local_file(str(MERGED_ANNOTATIONS_PATH), 
+                   remote_path="/root/merged_annotations.csv")
     .add_local_file(str(FONTS_PATH), remote_path="/root/DejaVuSans.ttf")
     .add_local_file(str(FONTS_BOLD_PATH), remote_path="/root/DejaVuSans-Bold.ttf")
-    .add_local_python_source("promt_en")
+    .add_local_python_source("prompt_en_zeroshot")
+    .add_local_python_source("prompt_en_fewshot")
+    .add_local_python_source("prompt_en_CCoT")
     .add_local_python_source("hardware")
     .add_local_python_source("typst_report")
     .add_local_python_source("progress_bar")
@@ -84,7 +107,7 @@ download_image = (
 # -------------------- DOWNLOAD MODEL -------------------- #
 cache_dir = "/root/.cache/llama.cpp"
 @app.function(
-    image=download_image, volumes={cache_dir: model_cache}, timeout=60 * 60 * 4,
+    image=download_image, volumes={cache_dir: model_cache}, timeout=60 * 60 * 10,
 )
 def download_model(repo_id: str, revision=None, quant: str = "Q8_0", hf_token= None):
     global gguf_path
@@ -248,13 +271,14 @@ def monitor_power(interval=0.5):
 cache_dir = "/root/.cache/llama.cpp"
 @app.function(
     image=download_image,
-    timeout=60 * 60 * 4,
+    timeout=60 * 60 * 10,
     volumes={
         results_dir: results,
         cache_dir: model_cache,
         },
     gpu=GPU_CONFIG)
-def run_pipeline(repo_id, query, prompt, quant="Q8_0", ollama=False, hf_token=None, DEBUG=False):
+def run_pipeline(repo_id, query, prompt, quant="Q8_0", ollama=False, dataset_language=None, 
+                prompt_language=None, dataset_nick_name=None, prompt_nick_name=None, hf_token=None, DEBUG=False):
     """
         Method to run inference on a model.
         `repo_id` is the huggingface link to a gguf compatibale model.
@@ -335,14 +359,14 @@ def run_pipeline(repo_id, query, prompt, quant="Q8_0", ollama=False, hf_token=No
 @app.function(
     image=download_image,
     volumes={results_dir: results},
-    timeout=60 * 60 * 4,
+    timeout=60 * 60 * 10,
 )
 def detect_ad_hominem_tk(df, prompt, model, quant, ollama, dataset_language, prompt_language, dataset_nick_name, prompt_nick_name, hf_token):
     import pandas as pd
     from datetime import datetime
     from zoneinfo import ZoneInfo
 
-    querys = df["speech_text_en"].to_list()
+    querys = df["speech_text"].to_list()
     
     inference, energy_measured, duration, cost, power_samples = run_pipeline.remote(
          model,
@@ -359,38 +383,9 @@ def detect_ad_hominem_tk(df, prompt, model, quant, ollama, dataset_language, pro
     for col in df.columns:
         results_df[col] = df[col].values
     
-    # Add new columns with default values
-    results_df['ad_hominem'] = 0
-    results_df['quote'] = ''
-    results_df['explanation'] = ''
-    results_df['confidence'] = 0.0
-    results_df['context'] = ''
-    results_df['overall_debate_topic'] = ''
-    results_df['local_topic'] = ''
-    results_df['target'] = ''
-    results_df['explicitness'] = ''
-    
-    # Process each result and fill in the new columns
-    for idx, row in results_df.iterrows():
-        cleaned_result = clean_result(row['result'])
-        if isinstance(cleaned_result, dict) and 'found_fallacy' in cleaned_result:
-            fallacies = cleaned_result['found_fallacy']
-            if fallacies:  # If any fallacies were found
-                results_df.at[idx, 'ad_hominem'] = 1
-                # Take the first fallacy's details (or highest confidence if multiple)
-                highest_conf_fallacy = max(fallacies, key=lambda x: x['confidence'])
-                results_df.at[idx, 'quote'] = highest_conf_fallacy.get('quote', '')
-                results_df.at[idx, 'explanation'] = highest_conf_fallacy.get('explanation', '')
-                results_df.at[idx, 'confidence'] = highest_conf_fallacy.get('confidence', 0.0)
-                results_df.at[idx, 'context'] = highest_conf_fallacy.get('context', '')
-                results_df.at[idx, 'overall_debate_topic'] = highest_conf_fallacy.get('overall_debate_topic', '')
-                results_df.at[idx, 'local_topic'] = highest_conf_fallacy.get('local_topic', '')
-                results_df.at[idx, 'target'] = highest_conf_fallacy.get('target', '')
-                results_df.at[idx, 'explicitness'] = highest_conf_fallacy.get('explicitness', '')
-    
     # Save complete results CSV
     now = datetime.now(ZoneInfo(TIME_ZONE)).strftime("%Y-%m-%d %H:%M:%S")
-    path = f"results_tk_debate_{dataset_language}_{model}_{now}.csv".replace("/","_")
+    path = f"report_tk_debate_{dataset_language}_{model}_{prompt_nick_name}_{prompt_language}_{now}".replace("/","_")
     out_path = os.path.join(results_dir, path)
     results_df.to_csv(out_path, index=False, sep=';')  # Using semicolon separator to match input format
     print("📁 Results saved to:", out_path)
@@ -398,6 +393,34 @@ def detect_ad_hominem_tk(df, prompt, model, quant, ollama, dataset_language, pro
     power_plot_path = plot_power_samples(power_samples)
     
     now = datetime.now(ZoneInfo(TIME_ZONE)).strftime("%Y-%m-%d %H:%M:%S")
+    
+    # Calculate metrics if the dataframe has the necessary columns
+    metrics = None
+    if 'final_label' in results_df.columns:
+        from sklearn.metrics import accuracy_score, precision_score, recall_score, f1_score
+        
+        # Extract predictions from the results
+        predictions = []
+        for idx, row in results_df.iterrows():
+            try:
+                result = clean_result(row['result'])
+                if isinstance(result, dict) and 'found_fallacy' in result:
+                    predictions.append(1 if result['found_fallacy'] else 0)
+                else:
+                    predictions.append(0)
+            except:
+                predictions.append(0)
+                
+        # Get true labels
+        true_labels = results_df["final_label"].tolist()
+        
+        # Calculate metrics
+        metrics = {
+            'accuracy': accuracy_score(true_labels, predictions),
+            'precision': precision_score(true_labels, predictions, zero_division=0),
+            'recall': recall_score(true_labels, predictions, zero_division=0),
+            'f1': f1_score(true_labels, predictions, zero_division=0)
+        }
     
     # Generate report
     generate_tk_report(
@@ -413,19 +436,46 @@ def detect_ad_hominem_tk(df, prompt, model, quant, ollama, dataset_language, pro
         duration,
         cost,
         power_samples,
-        [power_plot_path]
+        [power_plot_path],
+        metrics  # Pass the metrics
     )
     
-
-def generate_tk_report(results_df, prompt, dataset_language, prompt_language, dataset_nick_name, prompt_nick_name, model, quant, energy_measured, duration, cost, power_samples, graph_paths):
+def generate_tk_report(results_df, prompt, dataset_language, prompt_language, dataset_nick_name, prompt_nick_name, model, quant, energy_measured, duration, cost, power_samples, graph_paths, metrics=None):
     from typst_report import TypstReport, get_prompt_hash
     from datetime import datetime
     from zoneinfo import ZoneInfo
     import os
-
+    
     report = TypstReport()
     prompt_hash = str(get_prompt_hash(prompt))
     now = datetime.now(ZoneInfo(TIME_ZONE)).strftime("%Y-%m-%d %H:%M:%S")
+    
+    # Only calculate metrics if they weren't provided and the dataframe has the necessary columns
+    if metrics is None and 'final_label' in results_df.columns:
+        from sklearn.metrics import accuracy_score, precision_score, recall_score, f1_score
+        
+        # Extract predictions from the results
+        predictions = []
+        for _, row in results_df.iterrows():
+            try:
+                result = clean_result(row['result'])
+                if isinstance(result, dict) and 'found_fallacy' in result:
+                    predictions.append(1 if result['found_fallacy'] else 0)
+                else:
+                    predictions.append(0)
+            except:
+                predictions.append(0)
+                
+        # Get true labels
+        true_labels = results_df["final_label"].tolist()
+        
+        # Calculate metrics
+        metrics = {
+            'accuracy': accuracy_score(true_labels, predictions),
+            'precision': precision_score(true_labels, predictions, zero_division=0),
+            'recall': recall_score(true_labels, predictions, zero_division=0),
+            'f1': f1_score(true_labels, predictions, zero_division=0)
+        }
     
     info = [
         ("Model", model),
@@ -441,6 +491,15 @@ def generate_tk_report(results_df, prompt, dataset_language, prompt_language, da
         ("n tests", len(results_df))  # Added total tests
     ]
     
+    # Add metrics if available
+    if metrics:
+        info.extend([
+            ("Accuracy", f"{metrics['accuracy']*100:.1f}%"),
+            ("Precision", f"{metrics['precision']*100:.1f}%"),
+            ("Recall", f"{metrics['recall']*100:.1f}%"),
+            ("F1 Score", f"{metrics['f1']*100:.1f}%")
+        ])
+    
     # Convert graph paths to relative paths
     relative_graph_paths = [os.path.basename(path) for path in graph_paths if path]
     report.add_general_info(info, relative_graph_paths)
@@ -448,37 +507,49 @@ def generate_tk_report(results_df, prompt, dataset_language, prompt_language, da
     results_df["cleaned_output"] = results_df["result"].apply(clean_result)
     for _, speech in results_df.iterrows():
         report.add_test({
-            "Speech": speech["speech_text_en"],
+            "Speech": speech["speech_text"],
             "Speaker": speech["speaker_name"],
             "Party": speech["speaker_party"],
             "Result": speech["cleaned_output"]
         })
 
-    path = f"report_tk_debate_{dataset_language}_{model}_{now}".replace("/","_")
+    path = f"report_tk_debate_{dataset_language}_{model}_{prompt_nick_name}_{prompt_language}_{now}".replace("/","_")
     out_path = os.path.join(results_dir, path)
     report.save(f"{out_path}.typ", f"{out_path}.pdf")
 
 @app.function(
     image=download_image,
-    timeout=60 * 60 * 4,
+    timeout=60 * 60 * 10,
     volumes={results_dir: results, cache_dir: model_cache},
 )
-def run_tweede_kamer_analysis(test_run=True):
-    import pandas as pd
-    from promt_en import prompt as PROMPT_TEMPLATE_EN
+def run_tweede_kamer_analysis(test_run, prompt_type): 
+    import pandas as pd  # Move imports to start of function
     from key import hf_token
+    from sklearn.metrics import confusion_matrix, accuracy_score, precision_score, recall_score, f1_score
+    import seaborn as sns
+    import matplotlib.pyplot as plt
+    from datetime import datetime  
+    from zoneinfo import ZoneInfo  
 
-    # Load and filter TK dataset
-    df = pd.read_csv("/root/speeches_translated_with_parties_fixed.csv", sep=";")
-    debate_url = "https://zoek.officielebekendmakingen.nl/h-tk-20212022-2-2.html"
-    debate_df = df[df['url'] == debate_url].copy()
+    if prompt_type not in PROMPT_CONFIGS:
+        raise ValueError(f"Unknown prompt type: {prompt_type}. Available types: {list(PROMPT_CONFIGS.keys())}")
+
+    prompt_config = PROMPT_CONFIGS[prompt_type]
+    print(f"Using {prompt_config['name']} prompt: {prompt_config['description']}")
+
+    # Load merged annotations dataset
+    df = pd.read_csv("/root/merged_annotations.csv", sep=";")
     
     # Configure test or full run
     if test_run:
-        debate_df = debate_df.head(50)
+        # Get a balanced sample with both classes
+        class_0 = df[df['final_label'] == 0].head(5)
+        class_1 = df[df['final_label'] == 1].head(5)
+        debate_df = pd.concat([class_0, class_1])
         dataset_suffix = "_test"
-        print(f"🧪 TEST RUN: Analyzing first {len(debate_df)} speeches")
+        print(f"🧪 TEST RUN: Analyzing {len(debate_df)} balanced speeches (5 per class)")
     else:
+        debate_df = df
         dataset_suffix = ""
         print("📊 FULL RUN: Analyzing all speeches")
 
@@ -491,24 +562,227 @@ def run_tweede_kamer_analysis(test_run=True):
 
     for model_id, model_name in models:
         print(f"\n🔄 Processing with {model_name} ({model_id})")
-        detect_ad_hominem_tk.remote(
-            debate_df, 
-            PROMPT_TEMPLATE_EN,
+        
+        # Run analysis using Dutch text
+        inference, energy_measured, duration, cost, power_samples = run_pipeline.remote(
             model_id,
-            "",
+            debate_df["speech_text"].tolist(),
+            prompt_config['prompt'],  # Use the prompt from config
             ollama=True,
-            dataset_language="EN", 
+            dataset_language="NL", 
             prompt_language="EN", 
-            dataset_nick_name=f"tweede_kamer_debate_{model_name.lower()}{dataset_suffix}",
-            prompt_nick_name="Mika-prompt",
+            dataset_nick_name=f"tweede_kamer_debate_{model_name.lower()}_{prompt_type}{dataset_suffix}",
+            prompt_nick_name=f"{prompt_config['name']}-prompt",
             hf_token=hf_token
         )
 
+        # Process results
+        results_df = pd.DataFrame(inference)
+        
+        # Add original data columns to results
+        for col in debate_df.columns:
+            results_df[col] = debate_df[col].values
+            
+        # Add new columns with default values
+        # Fallacy detection and summary
+        results_df['found_fallacy'] = 0
+        results_df['count'] = 0
+        results_df['average_confidence'] = 0.0
+        results_df['highest_confidence'] = 0.0
+        results_df['lowest_confidence'] = 0.0
+        
+        # Mentions-related columns (will store multiple values separated by '|||')
+        results_df['mention_names'] = ''
+        results_df['mention_types'] = ''
+        results_df['mention_quotes'] = ''
+        results_df['mention_categories'] = ''
+        
+        # Fallacy details
+        results_df['fallacy_quote'] = ''
+        results_df['fallacy_explanation'] = ''
+        results_df['fallacy_local_topic'] = ''
+        results_df['fallacy_target'] = ''
+        results_df['fallacy_explicitness'] = ''
+        results_df['fallacy_confidence'] = '' 
+        
+        # Speech relation
+        results_df['speech_relation_type'] = ''
+        results_df['speech_relation_justification'] = ''
+        results_df['speech_relation_confidence'] = 0.0
+        
+        # Process each result and fill in the new columns
+        for idx, row in results_df.iterrows():
+            try:
+                cleaned_result = clean_result(row['result'])
+                if isinstance(cleaned_result, dict):
+                    # Process mentions (handling multiple entries)
+                    mentions = cleaned_result.get('mentions', [])
+                    if mentions:
+                        names = []
+                        types = []
+                        quotes = []
+                        categories = []
+                        
+                        for mention in mentions:
+                            names.append(mention.get('name', ''))
+                            types.append(mention.get('type', ''))
+                            quotes.append(mention.get('quote', ''))
+                            categories.append(mention.get('mention_category', ''))
+                        
+                        # Join with delimiter
+                        results_df.at[idx, 'mention_names'] = '|||'.join(names)
+                        results_df.at[idx, 'mention_types'] = '|||'.join(types)
+                        results_df.at[idx, 'mention_quotes'] = '|||'.join(quotes)
+                        results_df.at[idx, 'mention_categories'] = '|||'.join(categories)
+                    
+                    # Summary statistics
+                    summary = cleaned_result.get('summary', {})
+                    results_df.at[idx, 'count'] = summary.get('count', 0)
+                    results_df.at[idx, 'average_confidence'] = summary.get('average_confidence', 0.0)
+                    results_df.at[idx, 'highest_confidence'] = summary.get('highest_confidence', 0.0)
+                    results_df.at[idx, 'lowest_confidence'] = summary.get('lowest_confidence', 0.0)
+
+                    # Found fallacy details
+                    fallacies = cleaned_result.get('found_fallacy', [])
+                    if fallacies:
+                        results_df.at[idx, 'found_fallacy'] = 1
+                        
+                        # Store all fallacies using delimiters
+                        quotes = []
+                        explanations = []
+                        topics = []
+                        targets = []
+                        explicitness = []
+                        confidences = []
+                        
+                        for fallacy in fallacies:
+                            quotes.append(fallacy.get('quote', ''))
+                            explanations.append(fallacy.get('explanation', ''))
+                            topics.append(fallacy.get('local_topic', ''))
+                            targets.append(fallacy.get('target', ''))
+                            explicitness.append(fallacy.get('explicitness', ''))
+                            confidences.append(str(fallacy.get('confidence', 0)))
+                        
+                        # Join with delimiter
+                        results_df.at[idx, 'fallacy_quote'] = '|||'.join(quotes)
+                        results_df.at[idx, 'fallacy_explanation'] = '|||'.join(explanations)
+                        results_df.at[idx, 'fallacy_local_topic'] = '|||'.join(topics)
+                        results_df.at[idx, 'fallacy_target'] = '|||'.join(targets)
+                        results_df.at[idx, 'fallacy_explicitness'] = '|||'.join(explicitness)
+                        results_df.at[idx, 'fallacy_confidence'] = '|||'.join(confidences)
+
+                    # Speech relation
+                    speech_relation = cleaned_result.get('speech_relation', {})
+                    results_df.at[idx, 'speech_relation_type'] = speech_relation.get('type', '')
+                    results_df.at[idx, 'speech_relation_justification'] = speech_relation.get('justification', '')
+                    results_df.at[idx, 'speech_relation_confidence'] = speech_relation.get('confidence', 0.0)
+            except Exception as e:
+                print(f"Error processing row {idx}: {e}")
+                continue
+        
+        # Save results CSV
+        prompt_language = "EN"
+        now = datetime.now(ZoneInfo(TIME_ZONE)).strftime("%Y-%m-%d %H:%M:%S")
+        csv_path = f"results_tk_debate_NL_{model_name}_{prompt_type}_{prompt_language}_{now}.csv".replace("/","_")
+        csv_out_path = os.path.join(results_dir, csv_path)
+        results_df.to_csv(csv_out_path, index=False, sep=';')
+        print("📁 Results saved to:", csv_out_path)
+        
+        # Extract predictions
+        predictions = []
+        for idx, row in results_df.iterrows():
+            try:
+                result = clean_result(row['result'])
+                if isinstance(result, dict) and 'found_fallacy' in result:
+                    predictions.append(1 if result['found_fallacy'] else 0)
+                else:
+                    predictions.append(0)
+            except:
+                predictions.append(0)
+
+        # Get true labels
+        true_labels = debate_df["final_label"].tolist()
+
+        # Calculate metrics
+        accuracy = accuracy_score(true_labels, predictions)
+        precision = precision_score(true_labels, predictions, zero_division=0)
+        recall = recall_score(true_labels, predictions, zero_division=0)
+        f1 = f1_score(true_labels, predictions, zero_division=0)
+        
+        # Create and save confusion matrix
+        cm = confusion_matrix(true_labels, predictions)
+        plt.figure(figsize=(8, 6))
+        sns.heatmap(cm, annot=True, fmt='d', cmap='Blues', 
+               xticklabels=['No Fallacy', 'Fallacy'], 
+               yticklabels=['No Fallacy', 'Fallacy'])
+        plt.ylabel('True Label', fontsize=11, labelpad=10)
+        plt.xlabel('Predicted Label', fontsize=11, labelpad=10)
+        plt.title(f'Confusion Matrix - {model_id}', pad=15)
+        plt.tight_layout()
+        confusion_matrix_path = os.path.join(results_dir, "confusion_matrix.png")
+        plt.savefig(confusion_matrix_path)
+        plt.close()
+        
+        metrics = {
+            'accuracy': accuracy,
+            'precision': precision,
+            'recall': recall,
+            'f1': f1
+        }
+
+        # Generate PDF report
+        power_plot_path = plot_power_samples(power_samples)
+        generate_tk_report(
+            results_df,
+            prompt_config['prompt'],
+            "NL",
+            "EN",
+            f"tweede_kamer_debate_{model_name.lower()}_{prompt_type}{dataset_suffix}",
+            f"{prompt_config['name']}-prompt",
+            model_id,
+            "Q8_0",
+            energy_measured,
+            duration,
+            cost,
+            power_samples,
+            [power_plot_path, confusion_matrix_path],
+            metrics  # Pass the metrics to avoid recalculation
+        )
+
+        # Print results
+        print(f"📝 Report generated: {csv_path}")
+        print(f"\n✨ Results for {model_name}:")
+        print(f"Accuracy: {accuracy*100:.1f}%")
+        print(f"Precision: {precision*100:.1f}%")
+        print(f"Recall: {recall*100:.1f}%")
+        print(f"F1 Score: {f1*100:.1f}%")
+        print("Confusion Matrix:")
+        print(cm)
+        
 @app.local_entrypoint()
 def main():
-    # Easy to comment out/change between test and full run
-    test_mode = True  # Set to False for full run
+    # All configuration in one place
+    config = {
+        "test_mode": True,  # Set to False for full run
+        "prompt_types": ["zeroshot", "fewshot", "ccot"]  # List of prompts to run
+    }
     
-    print("📤 Submitting Tweede Kamer analysis job...")
-    run_tweede_kamer_analysis.remote(test_run=test_mode)
-    print("✅ Job submitted! You can now close your laptop.")
+    for prompt_type in config["prompt_types"]:
+        print(f"\n📤 Submitting Tweede Kamer analysis job using {prompt_type} prompt...")
+        run_tweede_kamer_analysis.remote(
+            test_run=config["test_mode"],
+            prompt_type=prompt_type
+        )
+        print(f"✅ Job submitted for {prompt_type}")
+    
+    print("\n🎉 All jobs submitted! You can now close your laptop.")
+
+
+# Run all prompts
+#"prompt_types": ["zeroshot", "fewshot", "ccot"]
+
+# Run only two prompts
+#"prompt_types": ["zeroshot", "fewshot"]
+
+# Run single prompt
+#"prompt_types": ["ccot"]
