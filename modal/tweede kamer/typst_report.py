@@ -136,7 +136,6 @@ class TypstReport:
             f.write(self.content)
         subprocess.run(["typst", "compile", typst_path, pdf_path], check=True)
 
-
 if __name__ == "__main__":
     for prompt_type, config in PROMPT_CONFIGS.items():
         datasets = [
@@ -152,11 +151,26 @@ if __name__ == "__main__":
                 df["dataset_name"] = "Tweede Kamer Debate"
                 df["prompt_version"] = f"{tag}-{prompt_hash}"
                 df["model"] = model
-                df["cleaned_output"] = df["result"].apply(clean_result)
+                
+                # Process results with error handling
+                df["cleaned_output"] = None
+                len_unparsed = 0
+                for idx, row in df.iterrows():
+                    try:
+                        df.at[idx, "cleaned_output"] = clean_result(row['result'])
+                    except Exception:
+                        # For unparsable results, use the raw text or indicate failure
+                        df.at[idx, "cleaned_output"] = {"error": "Could not parse JSON", "raw_text": str(row['result'])}
+                        len_unparsed += 1
                 
                 from datetime import datetime
                 from zoneinfo import ZoneInfo
                 now = datetime.now(ZoneInfo("Europe/Amsterdam")).strftime("%Y-%m-%d %H:%M:%S")
+                
+                # Default values for variables that might not be defined
+                duration = 0.0
+                cost = 0.0
+                energy_measured = 0.0
                 
                 # Calculate metrics if possible
                 metrics = {}
@@ -167,7 +181,7 @@ if __name__ == "__main__":
                     predictions = []
                     for _, row in df.iterrows():
                         try:
-                            result = clean_result(row['result'])
+                            result = row['cleaned_output'] if isinstance(row['cleaned_output'], dict) else clean_result(row['result'])
                             if isinstance(result, dict) and 'found_fallacy' in result:
                                 predictions.append(1 if result['found_fallacy'] else 0)
                             else:
