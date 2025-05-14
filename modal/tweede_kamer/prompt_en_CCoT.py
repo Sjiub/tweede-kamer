@@ -117,7 +117,7 @@ If no ad-hominem attacks are found:
       "name": "string (resolved name of person or party)",
       "type": "string ('person' or 'party')",
       "quote": "string (exact quote from the speech)",
-      "mention_category": "string ('neutral', 'agreeing', 'disagreeing', 'ad hominem attack')"
+      "mention_category": "string ('neutral', 'agreeing', 'disagreeing')"
     }}
   ],
   "found_fallacy": [],
