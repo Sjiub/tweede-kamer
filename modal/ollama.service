@@ -7,5 +7,7 @@ User=ollama
 Group=ollama
 Restart=always
 RestartSec=3
+# Environment="PATH=/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin"
+# Environment="OLLAMA_MODELS=/opt/ai/models"
 [Install]
 WantedBy=default.target

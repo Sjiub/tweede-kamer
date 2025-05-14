@@ -123,7 +123,7 @@ class TypstReport:
     def save(self, typst_path="report.typ", pdf_path="report.pdf"):
         with open(typst_path, "w", encoding="utf-8") as f:
             f.write(self.content)
-        subprocess.run(["typst", "compile", typst_path, pdf_path], check=True)
+        #subprocess.run(["typst", "compile", typst_path, pdf_path], check=True)
 
 if __name__ == "__main__":
     datasets = [
