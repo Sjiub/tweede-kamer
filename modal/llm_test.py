@@ -15,7 +15,7 @@ class LLM_TEST:
 
     def __init__(self, prompt=None, df=None, parse_function=None, system_prompt=None, model=None, quant=None, ollama=False,
                  hf_token=None, dataset_nick_name=None, prompt_nick_name=None, text_key="Speech", row_range=None, row_count=None, 
-                 multithreads=1, TIME_ZONE = "Europe/Amsterdam", timeout=60 * 3):
+                 multithreads=1, TIME_ZONE = "Europe/Amsterdam", timeout=60 * 3, batch_size=10, dir_path=None):
 
         self.prompt = prompt
         self.df = df
@@ -33,6 +33,8 @@ class LLM_TEST:
         self.multithreads= multithreads
         self.TIME_ZONE = TIME_ZONE
         self.timeout = timeout
+        self.batch_size = batch_size
+        self.dir_path = dir_path
 
         
 
@@ -40,14 +42,21 @@ class LLM_TEST:
         self.prompt_language = langdetect.detect(prompt)
         self.dataset_language = langdetect.detect(df[text_key].iloc[0])
 
-        self.df_file_name = self.generate_file_name(".","csv")
-        self.df_lock_file = self.generate_file_name(".", "lock")
+        self.df_file_name = self.generate_file_name(dir_path,"csv")
+        self.df_lock_file = self.generate_file_name(dir_path, "lock")
+        # Prepair df
+        # Add missing columns
+        for col in [ "duration", "energy", "raw"]:
+            if col not in self.df.columns:
+                self.df[col] = None  # or use np.nan if you're doing numerical operations
+        df["power-samples"] = pd.Series(dtype="object")
+        df["result"] = pd.Series(dtype="object")
         self.df.to_csv(self.df_file_name, index=False)
         self.check_types()
     def __copy__(self):
         raise RuntimeError("Copies are not allowed—object bound to its original container.")
-
-    def write_result(self, update_list):
+    
+    def write_df(self, function):
         """
         This method makes sure the result is saved with the appropriate fail-saves
         """
@@ -56,15 +65,118 @@ class LLM_TEST:
             fcntl.flock(lock_file, fcntl.LOCK_EX)
             try:
                 self.df = pd.read_csv(self.df_file_name)
-                for update in update_list:
-                    idx = update["index"]
-                    result = update["result"]
-                    raw = update["raw"]
-                    self.df.loc[idx, ["result", "raw"]] = [result, raw]
-
+                result = function()
                 self.df.to_csv(self.df_file_name, index=False)
             finally:
                 fcntl.flock(lock_file, fcntl.LOCK_UN)
+        return result
+
+    def write_result(self, update_list):
+        """
+        This method makes sure the result is saved with the appropriate fail-saves
+        """
+        # This blocks other read's -> avoids access to the file at the same time
+        def manipulation():
+            for update in update_list:
+                idx = update["index"]
+                del update["index"]
+
+                try:
+                    update["result"] = self.clean_result(update["raw"])
+                except Exception as e:
+                    update["result"] = e
+                self.df.at[idx, "raw"] = update["raw"]
+                self.df.at[idx, "duration"] = update["duration"]
+                # Ensure 'result' column is ready for storing dicts
+                if "result" not in self.df.columns:
+                    self.df["result"] = pd.Series(dtype="object")
+                elif self.df["result"].dtype != "object":
+                    self.df["result"] = self.df["result"].astype("object")
+                self.df.at[idx, "result"] = update["result"]
+                self.df.at[idx, "energy"] = update["energy"]
+                self.df["power-samples"] = self.df["power-samples"].astype("object")
+                self.df.at[idx, "power-samples"] = update["power-samples"]
+                self.df.at[idx, "is_timeout"] = update["is_timeout"]
+        self.write_df(manipulation)
+
+    def get_compute_batch(self, batch_size=None):
+        """
+        This method gets a compute batch.
+        It marks the elements that get computed with [raw] = "processing..." to avoid multiple compute
+        """
+        if batch_size is None:
+            batch_size = self.batch_size
+        assert batch_size < len(self.df), "ERROR: batch size is bigger than data"
+
+        def manipulation():
+            # Ensure the dtype is compatible with strings
+            if self.df["raw"].dtype != "object":
+                self.df["raw"] = self.df["raw"].astype("object")
+
+            # Step 1: Filter out rows that are already "processing..."
+            available_df = self.df[self.df["raw"] != "processing..."]
+
+            # Step 2: Take a random sample
+            sample = available_df.sample(n=batch_size, random_state=42)
+
+            # Step 3: Mark sampled rows as "processing..."
+            self.df.loc[sample.index, "raw"] = "processing..."
+
+            # Step 4: Return indices of the sampled rows
+            return sample.index
+
+        return self.write_df(manipulation)
+
+    def compute_forecast_report(self, start_time, GPU_INFO, GPU_CONFIG):
+        import time
+        import datetime
+        from datetime import datetime
+        from zoneinfo import ZoneInfo  
+
+        total_rows = len(self.df)
+        if total_rows == 0:
+            print("No data available.")
+            return
+
+        # Identify unfinished and finished rows
+        unfinished_mask = self.df["raw"].isna() | (self.df["raw"] == "processing...")
+        finished_mask = ~unfinished_mask
+
+        finished_count = finished_mask.sum()
+        unfinished_count = unfinished_mask.sum()
+        finished_percent = (finished_count / total_rows) * 100
+
+        # Average duration
+        avg_duration = self.df.loc[finished_mask, "duration"].mean() if finished_count > 0 else None
+
+        # Average energy
+        avg_energy = self.df.loc[finished_mask, "energy"].mean() if finished_count > 0 else None
+
+        # Forecasts
+        remaining_time = avg_duration * unfinished_count if avg_duration else None
+        estimated_total_energy = avg_energy * total_rows if avg_energy else None
+
+        # Cost calculation: duration * price/sec * threads
+        price_per_sec = GPU_INFO[GPU_CONFIG]["price_per_sec"]
+        total_duration = self.df.loc[finished_mask, "duration"].sum()
+        estimated_cost = total_duration * price_per_sec if total_duration else None
+        readable_time = datetime.fromtimestamp(start_time, tz=ZoneInfo(self.TIME_ZONE)).strftime("%Y-%m-%d %H:%M:%S")
+        # Output
+        print("\n📊 Forecast Report")
+        print(f"✅ Finished: {finished_count}/{total_rows} ({finished_percent:.2f}%)")
+        print(f"⏱️ Running since: {readable_time}  Avg Duration: {avg_duration:.2f}s" if avg_duration else "⏱️ Avg Duration: N/A")
+        print(f"⏳ Estimated Remaining Time: {remaining_time/60:.2f} min" if remaining_time else "⏳ Remaining Time: N/A")
+        print(f"⚡ Estimated Total Energy: {estimated_total_energy:.2f} J" if estimated_total_energy else "⚡ Energy: N/A")
+        print(f"🤑 Estimated Cost: ${estimated_cost:.2f} 💰" if estimated_cost else "🤑 Cost: N/A")
+
+        return {
+            "finished_percent": round(finished_percent, 2),
+            "avg_duration": round(avg_duration, 2) if avg_duration else None,
+            "remaining_minutes": round(remaining_time / 60, 2) if remaining_time else None,
+            "estimated_total_energy": round(estimated_total_energy, 2) if estimated_total_energy else None,
+            "estimated_cost": round(estimated_cost, 2) if estimated_cost else None
+        }
+
 
 
     def check_types(self):
@@ -189,17 +301,21 @@ class LLM_TEST:
         plt.savefig(output_path)
         plt.close()
         return output_path
-    def generate_report_labled_data(self):
+    def generate_report_labled_data(self,start_time,GPU_INFO, GPU_CONFIG):
         from typst_report import TypstReport, get_prompt_hash
         from datetime import datetime
         from zoneinfo import ZoneInfo
         import os
+        import time
 
         report = TypstReport()
         confusion_matrix_path = self.plot_confusion_matrix(path=f'confusion_matrix.png')
         #plot_power_path = self.plot_power_samples(power_samples, output_path=f'power_plot.png')
 
-
+        params = self.compute_forecast_report(start_time=start_time, GPU_INFO=GPU_INFO, GPU_CONFIG=GPU_CONFIG)
+        self.duration = time.time() - start_time
+        self.cost = params["estimated_cost"]
+        self.energy = params["estimated_total_energy"]
         # Open csv file
         # Generate unique identifier
         prompt_hash = str(get_prompt_hash(self.prompt))
@@ -215,7 +331,7 @@ class LLM_TEST:
                 ("Accuracy", f"{(self.accuracy * 100):.2f}%"),
                 ("Unparsed ", self.len_unclassified),
                 ("n tests", len(self.df)),
-          #      ("Electricity Usage (W)", f"{energy_measured:.2f}")
+                ("Electricity Usage (W)", f"{self.energy:.2f}")
             ]
         report.add_general_info(info,[confusion_matrix_path])# plot_power_path])
 
@@ -223,5 +339,5 @@ class LLM_TEST:
         for _, test in self.df.iterrows():
             report.add_test(test)
         path = f"results_{self.prompt_language}_{self.dataset_language}_{self.model}_{now}".replace("/","_")
-        out_path = os.path.join(".", path)
+        out_path = os.path.join(self.dir_path, path)
         report.save(f"{out_path}.typ", f"{out_path}.pdf")

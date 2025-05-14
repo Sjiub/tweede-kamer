@@ -154,33 +154,56 @@ def llama_cpp_inference(llm, gguf_path: str, prompt: str, n_predict: int = -1,DE
         ollama_dir: model_cache
         },
     gpu=GPU_CONFIG)
-def ollama_inference(llm_test ,msg, temperature=0):
+def ollama_inference(model, list_msg, timeout, temperature=0):
     import ollama
     import subprocess
     import os
     import time
+    import threading
+    from concurrent.futures import ThreadPoolExecutor
 
+    # Initialise ollama
     subprocess.Popen(["ollama", "serve"], env={**os.environ, "OLLAMA_MODELS": ollama_dir})
-    time.sleep(0.5)
-    messages = []
+    time.sleep(1)
+    monitor = threading.Thread(target=monitor_power, daemon=True)
+    monitor.start()
 
-    if llm_test.system_prompt != None:
-        messages.append({'role': 'system', 'content': llm_test.system_prompt})
+    def call_ollama(message):
+        return ollama.chat(model=model, messages=message, options={"temperature": temperature})
 
-    if isinstance(msg, list):
-        messages.extend({'role': 'user', 'content': m} for m in msg)
-    else:
-        messages.append({'role': 'user', 'content': msg})
+    responses = []
 
-    response = ollama.chat(
-        model=llm_test.model,
-        messages=messages,
-        options={
-            'temperature': temperature
-        }
-    )
-    return response['message']['content']
+    with ThreadPoolExecutor(max_workers=1) as executor:
+        for messages in list_msg:
+            start_time = time.time()
+            power_samples.clear()
 
+            future = executor.submit(call_ollama, messages)
+            try:
+                response = future.result(timeout=timeout)
+                is_timeout = False
+                raw = response['message']['content']
+            except concurrent.futures.TimeoutError:
+                is_timeout = True
+                raw = None
+            except Exception as e:
+                raw = e
+                is_timeout = False
+
+            duration = time.time() - start_time
+            avg_power = sum(power_samples) / len(power_samples) if power_samples else 0
+            energy = avg_power * duration
+
+            responses.append({
+                "index": messages[-1]["index"],
+                "raw": raw,
+                "duration": duration,
+                "energy": energy,
+                "power-samples": power_samples.copy(),
+                "is_timeout": is_timeout
+            })
+
+    return responses
 # -------------------- Helper -------------------- #
 
 
@@ -218,12 +241,10 @@ def run_pipeline(llm_test, DEBUG=False):
     from progress_bar import storming_progress_bar
     import subprocess
     from llm_test import LLM_TEST
-    from concurrent.futures import ThreadPoolExecutor
+    from concurrent.futures import ThreadPoolExecutor, as_completed
 
     print("🚀 Starting pipeline...")
     # TODO find different way in monitoring power
-    #monitor = threading.Thread(target=monitor_power, daemon=True)
-    #monitor.start()
     start_time = time.time()
 
     # Initialise llm
@@ -235,66 +256,46 @@ def run_pipeline(llm_test, DEBUG=False):
         gguf_path = download_model.remote(llm_test)
         llm = Llama(model_path=gguf_path, n_gpu_layers=-1, n_ctx=4096, verbose=DEBUG)
 
-    inference = []
-    # TODO loop should specify a range and be able to run in parallel
-    # TODO load ollama differently
-    # Time stamp
-    
-    # Select range
-    full_query = llm_test.get_df()
-    if llm_test.row_range:
-        start_idx, end_idx = llm_test.row_range
-        full_query = query[start_idx:end_idx]
-    if llm_test.row_count:
-        full_query = full_query[:llm_test.row_count]
-    
+ 
+    def process_batch():
+        indices = llm_test.get_compute_batch()
+        query = []
+        for idx in indices:
+            messages = []
+            # Add system prompt
+            if llm_test.system_prompt != None:
+                messages.append({'role': 'system', 'content': llm_test.system_prompt})
+            df = llm_test.get_df()
+            pos = df.index.get_loc(idx)  # Get integer position of index
+            start = max(0, pos - llm_test.row_count)
+            if pos == 0:
+                rows = df.iloc[[0]]
+            else:  # as DataFrame
+                rows = df.iloc[start:pos]
+        
+            messages.extend([   
+                {'index': idx, 'role': 'user', 'content': llm_test.prompt.format(text=row)} 
+                for row in rows[llm_test.text_key]
+            ])
+            query.append(messages)
 
-    def process_row(idx_row):
-        idx, row = idx_row
-        storming_progress_bar(idx, len(full_query), start_time, update_message=f'Row: {idx}')
-        full_prompt = llm_test.prompt.format(text=row)
-        raw=None
-        try:
-            if llm_test.ollama:
-                raw = ollama_inference.remote(llm_test, [full_prompt])
-            else:
-                raw = llama_cpp_inference(llm, gguf_path, full_prompt)
-            parsed = llm_test.parse_function(result)
-        except Exception as e:
-            print(f"❌ Error parsing result at row {idx}: {e}")
-            if raw == None:
-                parsed = e
-            else:
-                parsed = str(raw)
-        llm_test.write_result([{"index": idx, "result": parsed, "raw": raw}])
+        results = ollama_inference.remote(llm_test.model, query, llm_test.timeout)
+        llm_test.write_result(results)
+        llm_test.compute_forecast_report(start_time, GPU_INFO, GPU_CONFIG)  
+
         
     # Inference execution
     with ThreadPoolExecutor(max_workers=llm_test.multithreads) as executor:
-        futures = [executor.submit(process_row, item) for item in enumerate(full_query)]
+        futures = [executor.submit(process_batch) for _ in range(llm_test.multithreads)]
 
-        for i, future in enumerate(futures):
+        for future in as_completed(futures):
             try:
-                result = future.result(timeout=llm_test.timeout)
-                
-            except TimeoutError:
-                print(f"Task {i} timed out")
-                
-
-    # Test metadata
-    duration = time.time() - start_time
-    #avg_power = sum(power_samples) / len(power_samples)
-    energy_measured = 0#avg_power * duration
-    cost = duration* GPU_INFO[GPU_CONFIG]["price_per_sec"] * llm_test.multithreads
-
-
-    print(f"\n⏱️ Duration: {duration:.2f} for {len(full_query)} querys. Average computation time: {duration/len(full_query)}")
-    print(f"⚡ Estimated power (by nvidia-smi): {energy_measured:.4f} J")
-    print(f"🤑 Cost: {cost:.2f} 💰")
-
-    llm_test.save_test( energy=energy_measured, duration=duration, cost=cost)
+                future.result()  # Wait for thread to complete
+            except Exception as e:
+                print(f"A thread failed with error: {e}")
+            
     compute_results(llm_test)
-
-    llm_test.generate_report_labled_data()#power_samples)
+    llm_test.generate_report_labled_data(start_time, GPU_INFO, GPU_CONFIG )#power_samples)
     return llm_test
 
 def compute_results(llm_test):
@@ -337,7 +338,7 @@ def run_all_evaluations():
     df = pd.read_csv("sample_data_english.csv")
     df_nl = pd.read_csv("sample_data_dutch.csv")
     # Sample indices from one of the dataframes
-    sampled_indices = df.sample(n=5, random_state=42).index
+    sampled_indices = df.sample(n=20, random_state=42).index
 
     # Use the same indices to sample both dataframes
     sampled_en = df.loc[sampled_indices]
@@ -370,11 +371,11 @@ def run_all_evaluations():
         prompt_nick_name="Prototype_prompt", 
         # howmany rows are being feed into the llm at once
         row_count=1,
-        # Specify the range
-        row_range=None,
-        # In how many engines the program should run
-        multithreads=1
-
+        # How many element should be in a batch
+        batch_size=10,
+        # In how many threads/container the program should run
+        multithreads=2,
+        dir_path=results_dir
     )
     # test execution
     run_pipeline(llm_test)
