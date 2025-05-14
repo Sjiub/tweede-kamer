@@ -5,8 +5,7 @@ import csv
 import json
 from pathlib import Path
 from hardware import GPU_INFO
-from promt_en import prompt as PROMPT_TEMPLATE_EN
-from promt_nl import prompt as PROMPT_TEMPLATE_NL
+from prompt import PROMPT_CONFIGS
 
 # Specify name of program
 app = modal.App("ad-hominem-detector")
@@ -67,13 +66,21 @@ download_image = (
     #.add_local_dir(".", remote_path="/root/ad-hominem")
     .add_local_file("sample_data_english.csv", remote_path="/root/sample_data_english.csv")
     .add_local_file("sample_data_dutch.csv", remote_path="/root/sample_data_dutch.csv")
+    .add_local_file("merged_annotations.csv", remote_path="/root/merged_annotations.csv")
     .add_local_file("ollama.service", remote_path= "/etc/systemd/system/ollama.service")
-    .add_local_python_source("promt_en", )
-    .add_local_python_source("promt_nl", )
+    .add_local_python_source("prompt_en", )
+    .add_local_python_source("prompt_nl", )
     .add_local_python_source("hardware")
     .add_local_python_source("typst_report")
     .add_local_python_source("progress_bar")
     .add_local_python_source("llm_test")
+    .add_local_python_source("prompt_en_zeroshot")
+    .add_local_python_source("prompt_en_fewshot")
+    .add_local_python_source("prompt_en_CCoT")
+    .add_local_python_source("prompt_nl_zeroshot")
+    .add_local_python_source("prompt_nl_fewshot")
+    .add_local_python_source("prompt_nl_CCoT")
+    .add_local_python_source("prompt")
 )
 
 # -------------------- DOWNLOAD MODEL -------------------- #
@@ -160,7 +167,7 @@ def ollama_inference(model, list_msg, timeout, temperature=0):
     import os
     import time
     import threading
-    from concurrent.futures import ThreadPoolExecutor
+    from concurrent.futures import ThreadPoolExecutor, TimeoutError
 
     # Initialise ollama
     subprocess.Popen(["ollama", "serve"], env={**os.environ, "OLLAMA_MODELS": ollama_dir})
@@ -183,7 +190,7 @@ def ollama_inference(model, list_msg, timeout, temperature=0):
                 response = future.result(timeout=timeout)
                 is_timeout = False
                 raw = response['message']['content']
-            except concurrent.futures.TimeoutError:
+            except TimeoutError:
                 is_timeout = True
                 raw = None
             except Exception as e:
@@ -256,7 +263,7 @@ def run_pipeline(llm_test, DEBUG=False):
         gguf_path = download_model.remote(llm_test)
         llm = Llama(model_path=gguf_path, n_gpu_layers=-1, n_ctx=4096, verbose=DEBUG)
 
- 
+    # TODO handle error-case where data gets smaller then batch size
     def process_batch():
         indices = llm_test.get_compute_batch()
         query = []
@@ -294,7 +301,7 @@ def run_pipeline(llm_test, DEBUG=False):
             except Exception as e:
                 print(f"A thread failed with error: {e}")
             
-    compute_results(llm_test)
+    llm_test.compute_results()
     llm_test.generate_report_labled_data(start_time, GPU_INFO, GPU_CONFIG )#power_samples)
     return llm_test
 
@@ -318,7 +325,62 @@ def compute_results(llm_test):
     llm_test.save_results(output=df, accuracy=accuracy, len_unclassified=len_unclassified)
     return llm_test
 
+def prep_data(prompt_type, sample_strategy="full", specific_indices=None, sample_size=None):
+    """
+    Unified function to run ad hominem analysis with different sampling strategies.
+    
+    Args:
+        prompt_type (str): Type of prompt to use ("zeroshot", "fewshot", "ccot")
+        sample_strategy (str): How to sample the data:
+            - "full": Use complete dataset
+            - "balanced": Equal number of positive/negative samples
+            - "specific": Use specific row indices
+            - "random": Random sample of specified size
+        specific_indices (list): List of specific indices to analyze (for "specific" strategy)
+        sample_size (int): Number of samples to use (for "balanced" or "random" strategy)
+    """
+    import pandas as pd
+    
+    # Validate prompt type
+    if prompt_type not in PROMPT_CONFIGS:
+        raise ValueError(f"Unknown prompt type: {prompt_type}. Available types: {list(PROMPT_CONFIGS.keys())}")
 
+    prompt_config = PROMPT_CONFIGS[prompt_type]
+    print(f"Using {prompt_config['name']} prompt: {prompt_config['description']}")
+
+    # Load dataset
+    df = pd.read_csv("merged_annotations.csv", sep=";")
+
+    # Sample selection based on strategy
+    if sample_strategy == "full":
+        debate_df = df
+        strategy_suffix = ""
+    
+    elif sample_strategy == "balanced":
+        sample_size = sample_size or 10  # Default to 10 if not specified
+        half_size = sample_size // 2
+        class_0 = df[df['final_label'] == 0].sample(n=half_size)
+        class_1 = df[df['final_label'] == 1].sample(n=half_size)
+        debate_df = pd.concat([class_0, class_1])
+        strategy_suffix = "_balanced"
+    
+    elif sample_strategy == "specific":
+        if not specific_indices:
+            raise ValueError("specific_indices must be provided when using 'specific' strategy")
+        debate_df = df.iloc[specific_indices].reset_index(drop=True)
+        strategy_suffix = "_specific"
+    
+    elif sample_strategy == "random":
+        if not sample_size:
+            raise ValueError("sample_size must be provided when using 'random' strategy")
+        debate_df = df.sample(n=sample_size)
+        strategy_suffix = "_random"
+    
+    else:
+        raise ValueError(f"Unknown sample strategy: {sample_strategy}")
+
+    print(f"🔍 Analyzing {len(debate_df)} speeches using {sample_strategy} strategy")
+    return debate_df, prompt_config, strategy_suffix, prompt_type
 
 @app.function(
     image=download_image,
@@ -330,19 +392,18 @@ def compute_results(llm_test):
     )
 def run_all_evaluations():
     import pandas as pd
-    from promt_en import prompt as PROMPT_TEMPLATE_EN
-    from promt_nl import prompt as PROMPT_TEMPLATE_NL
     # from key import hf_token
     from llm_test import LLM_TEST
 
-    df = pd.read_csv("sample_data_english.csv")
-    df_nl = pd.read_csv("sample_data_dutch.csv")
-    # Sample indices from one of the dataframes
-    sampled_indices = df.sample(n=20, random_state=42).index
+    # df = pd.read_csv("sample_data_english.csv")
+    # df_nl = pd.read_csv("sample_data_dutch.csv")
+    # # Sample indices from one of the dataframes
+    # sampled_indices = df.sample(n=20, random_state=42).index
 
-    # Use the same indices to sample both dataframes
-    sampled_en = df.loc[sampled_indices]
-    sampled_nl = df_nl.loc[sampled_indices]
+    # # Use the same indices to sample both dataframes
+    # sampled_en = df.loc[sampled_indices]
+    # sampled_nl = df_nl.loc[sampled_indices]
+    df, prompt_config, strategy_suffix, prompt_type = prep_data(prompt_type="ccot_en", sample_strategy="specific", specific_indices=[71, 72, 73, 74, 75])
 
     def extract_predicted_label(result):
         json
@@ -357,25 +418,26 @@ def run_all_evaluations():
         except Exception as e:
             # Optional: print(e) for debugging
             return "Unknown"
-
+    print("len of df to compute: ", len(df))
     # Initialise the test, this is for datasharing between methods and is purly cosmetic ;)     
     llm_test = LLM_TEST( 
-        prompt=PROMPT_TEMPLATE_EN, 
-        df=sampled_en, 
+        prompt=prompt_config['prompt'], 
+        df=df, 
         system_prompt="You are an expert in analyzing political texts. Analyze the text below for ad-hominem attacks.",
-        text_key="Speech",
+        text_key="speech_text",
         parse_function=extract_predicted_label, 
         model="mistral-small3.1", 
         ollama=True,
-        dataset_nick_name="US-Election", 
+        dataset_nick_name=f"tk_debate_{"mistral-small3.1".lower()}_{prompt_type}{strategy_suffix}",
         prompt_nick_name="Prototype_prompt", 
         # howmany rows are being feed into the llm at once
         row_count=1,
         # How many element should be in a batch
-        batch_size=10,
+        batch_size=2,
         # In how many threads/container the program should run
         multithreads=2,
-        dir_path=results_dir
+        dir_path=results_dir,
+        timeout=0.5
     )
     # test execution
     run_pipeline(llm_test)

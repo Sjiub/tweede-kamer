@@ -254,6 +254,24 @@ class LLM_TEST:
         self.df = output
         self.accuracy = accuracy
         self.len_unclassified = len_unclassified
+    def compute_results(self):
+        import pandas as pd
+        from sklearn.metrics import accuracy_score
+
+
+        self.df["predicted"] = self.df["result"].apply(self.parse_function)
+
+        self.len_unclassified = len(self.df[self.df["predicted"]== "Unknown"])
+        self.df = self.df[self.df["predicted"] != "Unknown"]
+
+        # Now make types consistent
+        self.df["truth_label"] = self.df["Label"] != "No Ad Hominem"
+        self.df["predicted"] = self.df["predicted"] != "No Ad Hominem"
+    
+        self.accuracy = accuracy_score(self.df["truth_label"], self.df["predicted"])
+        self.precision_score = precision_score(self.df["truth_label"], self.df["predicted"], zero_division=0),
+        self.recall_score = recall_score(self.df["truth_label"], self.df["predicted"], zero_division=0),
+        self.f1_score = f1_score(self.df["truth_label"], self.df["predicted"], zero_division=0),
 
     def plot_confusion_matrix(self, path="confusion_matrix.png"):
         from sklearn.metrics import confusion_matrix, accuracy_score
@@ -341,3 +359,82 @@ class LLM_TEST:
         path = f"results_{self.prompt_language}_{self.dataset_language}_{self.model}_{now}".replace("/","_")
         out_path = os.path.join(self.dir_path, path)
         report.save(f"{out_path}.typ", f"{out_path}.pdf")
+
+    def generate_tk_report(self, metrics=None):
+        from typst_report import TypstReport, get_prompt_hash
+        from datetime import datetime
+        from zoneinfo import ZoneInfo
+        import os
+        
+        report = TypstReport()
+        prompt_hash = str(get_prompt_hash(self.prompt))
+        now = datetime.now(ZoneInfo(self.TIME_ZONE)).strftime("%Y-%m-%d %H:%M:%S")
+        
+        # Count timeouts
+        timeout_count = self.df["is_timeout"].sum()
+        
+        # Calculate total ad hominem attacks (excluding timeouts)
+        non_timeout_df = self.df[self.df["is_timeout"] != 1]
+        total_attacks = sum(1 for _, row in non_timeout_df.iterrows() if row.get('found_fallacy', 0) == 1)
+        attack_percentage = (total_attacks / len(non_timeout_df) * 100) if len(non_timeout_df) > 0 else 0
+        
+        
+        info = [
+            ("Model", self.model),
+            ("Quantisation", self.quant),
+            ("Prompt Version", f'{self.prompt_nick_name}_{self.prompt_language}_{prompt_hash}'),
+            ("Dataset", "Tweede Kamer Debate"),
+            ("Date & Time", now),
+            ("Number of Speeches", len(self.df)),
+            ("Duration (s)", f"{self.duration:.2f}"),
+            (r"Cost (\$)", f"{self.cost:.2f}"),
+            ("Electricity Usage (J)", f"{self.energy:.2f}"),
+            ("Ad Hominem Attacks", f"{total_attacks} ({attack_percentage:.1f}%)"),
+            ("GPU Type", GPU_CONFIG),
+            ("n tests", len(self.df)),
+            ("Timeouts", timeout_count),
+            ("Accuracy", f"{self.accuracy * 100:.1f}%"),
+            ("Precision", f"{self.precision_score * 100:.1f}%"),
+            ("Recall", f"{self.recall_score * 100:.1f}%"),
+            ("F1 Score", f"{self.f1_score * 100:.1f}%")
+        ]
+        # Convert graph paths to relative paths
+        relative_graph_paths = [os.path.basename(path) for path in graph_paths if path]
+        report.add_general_info(info, relative_graph_paths)
+
+        # Process each speech for the report with special handling for timeouts
+        for _, speech in self.df.iterrows():
+            result_to_display = None
+            
+            # Handle timeout cases
+            if speech.get('is_timeout', 0) == 1:
+                result_to_display = {
+                    "status": "timeout",
+                    "raw_result": {
+                        "timeout_error": "Inference timed out",
+                        "is_timeout": True
+                    }
+                }
+            else:
+                # For non-timeout cases, try to clean the result
+                try:
+                    result_to_display = self.clean_result(speech["result"]) if isinstance(speech["result"], str) else speech["result"]
+                except Exception:
+                    result_to_display = {
+                        "status": "error",
+                        "raw_result": {
+                            "parsing_error": "Unable to parse JSON output",
+                            "raw_output": str(speech["result"])[:500] + "..." if len(str(speech["result"])) > 500 else str(speech["result"])
+                        }
+                    }
+            
+            report.add_test({
+                "Speech": speech["speech_text"],
+                "Speaker": speech["speaker_name"],
+                "Party": speech["speaker_party"],
+                "Result": result_to_display
+            })
+        path = f"report_tk_debate_{self.prompt_language}_{self.dataset_language}_{self.model}_{now}".replace("/","_")
+        out_path = os.path.join(self.dir_path, path)
+        report.save(f"{out_path}.typ", f"{out_path}.pdf")
+
