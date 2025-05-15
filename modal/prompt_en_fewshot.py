@@ -60,9 +60,6 @@ Exclude:
 - Mentions of procedural figures such as “de voorzitter”
 - Mentions made in speeches by non-political roles
 
-When a person or political party is mentioned, including through pronouns or indirect references (e.g., he, she, they, that party), attempt to resolve the reference to the most likely individual or party name.  
-If you are unsure of the correct reference, omit the mention rather than guessing or making an assumption.
-
 TASK 3:
 Determine whether the current speech segment is a direct response to the previous speaker or an independent contribution to the debate. Respond with "response" or "independent" only.
 

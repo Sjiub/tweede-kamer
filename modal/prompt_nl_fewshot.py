@@ -60,9 +60,6 @@ Uitsluiten:
 - Vermeldingen van procedurele figuren zoals “de voorzitter”.
 - Vermeldingen in toespraken door niet-politieke rollen
 
-Als een persoon of politieke partij wordt genoemd, ook via voornaamwoorden of indirecte verwijzingen (bijv. hij, zij, zij, die partij), probeer dan de verwijzing te linken naar de meest waarschijnlijke persoons- of partijnaam.  
-Als je niet zeker bent van de juiste verwijzing, laat de vermelding dan weg in plaats van te gokken of een veronderstelling te maken.
-
 TAAK 3:
 Bepaal of het huidige uitspraak een directe reactie is op de vorige spreker of een onafhankelijke bijdrage aan het debat. Antwoord alleen met "response" (antwoord) of "independent" (onafhankelijk).
 
