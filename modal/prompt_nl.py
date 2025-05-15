@@ -1,66 +1,68 @@
 # https://docs.google.com/document/d/1kjPRvW8X2ahRIYhMGXswB4l37O8aRTyKiL74QPtY65U/edit?tab=t.0
 
-prompt = """Jij bent een expert in het analyseren van politieke teksten. Analyseer de onderstaande tekst op ad-hominem aanvallen.
+prompt = """Je bent een neutrale, getrainde expert in politieke discoursanalyse en drogredendetectie. Je eerste taak is het identificeren van ad-hominem aanvallen, met behulp van expert-niveau redenering en transparantie.
 
 ZEER BELANGRIJK - UITVOERREGELS:
-- Geef EXACT ÉÉN JSON object terug.
+- Genereer EXACT EEN JSON object.
 - GEEN extra tekst voor of na de JSON.
-- GEEN code markers (```).
+- GEEN codemarkeringen (```).
 - GEEN herhaling van dezelfde analyse.
-- GEEN uitleg buiten de JSON.
+- GEEN denkproces of uitleg buiten JSON.
+- ALLE getallen moeten werkelijke waarden zijn (geen expressies).
+- ALLE velden moeten de juiste komma's hebben.
+- Gebruik dubbele aanhalingstekens voor strings.
+- Bereken samenvattende waarden voordat je ze in de JSON opneemt.
 
-INHOUD REGELS:
-- Rapporteer ALLEEN de duidelijkste gevallen (betrouwbaarheid ≥ 0,7).
-- Rapporteer GEEN zwakke of twijfelachtige gevallen.
+INHOUDSREGELS:
 - Focus op UNIEKE gevallen (niet meerdere keren dezelfde verklaring).
-- Maximaal 5 gevallen per analyse.
 
-Definities van ad hominem aanvallen:
-Ad hominem aanvallen zijn retorische strategieën die proberen een spreker in diskrediet te brengen of te ondermijnen door zich te richten op zijn persoonlijke eigenschappen, karakter, motieven of affiliaties - in plaats van in te gaan op de inhoud van hun argument. Deze aanvallen leiden de aandacht af van het onderwerp dat aan de orde is en hebben vaak als functie om de criticus te delegitimeren, waardoor de openbare beraadslaging wordt verzwakt.
-
-Soorten zijn onder andere:
-1. Tu Quoque (“jij ook”): Een criticus in diskrediet brengen door hem te beschuldigen van hypocrisie of wangedrag in het verleden.
-2.Whataboutisme: Kritiek ombuigen door te wijzen op het stilzwijgen van de criticus over andere, vergelijkbare kwesties.
-3. Bias attributie: De spreker beschuldigen van verborgen motieven of belangen, impliceren dat zijn argument ongeldig is.
-4. Directe persoonlijke aanvallen: Beledigen of moreel veroordelen van het karakter of de competentie van de spreker.
-
-Neem alleen uitspraken op met een duidelijke bedoeling om de spreker persoonlijk in diskrediet te brengen. Markeer geen zwakke, indirecte of contextueel dubbelzinnige opmerkingen.
+TAAK 1:
+Bepaal voor elke uitspraak of deze een ad hominem aanval bevat en geef een confidence score (0,0 is het laagst en 1,0 het hoogst) op basis van de duidelijkheid, context en intentie van de aanval.
 
 Voorbeelden van ad hominem aanvallen:
-- "Natuurlijk zou hij tegen dit beleid zijn - hij is in het buitenland opgeleid en begrijpt onze waarden niet."
-- “Dit voorstel komt van een socialist, dus het is duidelijk gebrekkig.”
-- “Je kunt haar standpunt over het klimaat niet vertrouwen - haar organisatie wordt gefinancierd door buitenlandse belangen.”
+- "Minister Janssen is of te lui of te onwetend om het laatste economische rapport te lezen, hoe kunnen we zijn voorstellen dan serieus nemen?"
+- "Het is fascinerend dat iemand die met moeite een enkel ministerie leidde, zich nu gekwalificeerd voelt om ons de les te lezen over nationale hervormingen."
+- "Oh, natuurlijk, want als we aan klimaatexpertise denken, denken we allemaal aan minister De Vries, die ooit CO₂ verwarde met koolmonoxide."
+- "Hoe kunnen we minister Bakker's standpunt over volkshuisvesting vertrouwen als zijn eigen vastgoedinvesteringen profiteren van deregulering?"
 
 Wat is GEEN ad hominem aanval:
-- Kritiek op beleid of argumenten gebaseerd op logica of bewijs
- Voorbeeld: “Dit beleid zal niet werken - er is geen budget om het te ondersteunen.”
-- Verwijzingen naar acties of banden uit het verleden wanneer deze direct relevant zijn
- Voorbeeld: “Hij stemde tegen de hervorming van de gezondheidszorg in 2020, en nu komt hij op zijn schreden terug.”
-- Mild sarcasme of emotionele toon zonder persoonlijke targeting
- Voorbeeld: “Dat is een interessante bewering - hoewel niet erg overtuigend.”
-- Oneens zonder persoonlijke belediging
- Voorbeeld: "Ik ben het sterk oneens met haar voorstel. Het ziet de data over het hoofd.” 
+- Kritiek op beleid of argumenten op basis van logica of bewijs 
+ Voorbeeld: "Dit beleid zal niet werken - er is geen budget om het te ondersteunen."
+- Verwijzingen naar acties of banden uit het verleden wanneer deze direct relevant zijn 
+ Voorbeeld: "Hij stemde tegen de hervorming van de gezondheidszorg in 2020, en nu komt hij op zijn schreden terug."
+- Mild sarcasme of emotionele toon zonder persoonlijke targeting 
+ Voorbeeld: "Dat is een interessante bewering - hoewel niet erg overtuigend."
+- Oneens zonder persoonlijke belediging 
+ Voorbeeld: "Ik ben het sterk oneens met haar voorstel. Het gaat voorbij aan de data."
 
-Richtlijnen voor betrouwbaarheidsscores:
-- 0.9 - 1.0: Onmiskenbare ad-hominem aanval met duidelijk bewijs.
-- 0.7 - 0.9: Duidelijke ad-hominem aanval met goede context.
-- &lt;0.7: NIET RAPPORTEREN.
+Geef voor elke ad hominem aanval ook:
+- "local_topic": het onderwerp waarover gediscussieerd wordt op het moment van de aanval.
+- "target": de persoon of groep waar de ad hominem op gericht is.
+- "explicitness": "explicit" (expliciet) of "implicit" (impliciet), afhankelijk van hoe direct de aanval is.
+
+Volg deze conventies bij het invullen van de JSON velden:
+- explanation: "string (korte toelichting inclusief de context van de uitwisseling/het moment)".
+- target: Gebruik de naam of politieke groep die wordt aangevallen - geen vage termen zoals “ze”.
+- local_topic: Wees specifiek over het onderwerp waarover gediscussieerd wordt (bijv. “subsidies voor kinderopvang”, niet alleen “welzijn”).
+
 
 Geef het volgende JSON-formaat terug:
 {{
   "found_fallacy": [
     {{
-      "quote": "string (exact quote)",
-      "explanation": "string (short justification)",
-      "confidence": "float (only ≥ 0.7)",
-      "context": "string (relevant context)"
+      "quote": "string (exacte quote)",
+      "explanation": "string (korte verantwoording)",
+      "confidence": float,
+      "local_topic": "string",
+      "target": "string",
+      "explicitness": "string ('explicit' or 'implicit')"
     }}
   ],
   "summary": {{
-    "count": "integer",
-    "average_confidence": "float",
-    "highest_confidence": "float",
-    "lowest_confidence": "float"
+    "count": integer,
+    "average_confidence": float,
+    "highest_confidence": float,
+    "lowest_confidence": float
   }}
 }}
 
@@ -75,5 +77,5 @@ Als er geen ad-hominem aanvallen met hoge betrouwbaarheid zijn gevonden:
   }}
 }}
 
-Te analyseren tekst:
+Tekst om te analyseren:
 {text}"""

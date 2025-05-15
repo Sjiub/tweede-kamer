@@ -23,7 +23,7 @@ Geef voor elke ad hominem aanval ook:
 - "explicitness": "explicit" (expliciet) of "implicit" (impliciet), afhankelijk van hoe direct de aanval is.
 
 Volg deze conventies bij het invullen van de JSON velden:
-- context: Beschrijf het moment of de uitwisseling waarop het citaat reageert (bijv. “in reactie op kritiek op het migratiebeleid”).
+- explanation: "string (korte toelichting inclusief de context van de uitwisseling/het moment)".
 - target: Gebruik de naam of politieke groep die wordt aangevallen - geen vage termen zoals “ze”.
 - local_topic: Wees specifiek over het onderwerp waarover gediscussieerd wordt (bijv. “subsidies voor kinderopvang”, niet alleen “welzijn”).
 

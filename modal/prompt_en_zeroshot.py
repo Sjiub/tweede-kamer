@@ -23,7 +23,7 @@ For each ad hominem attack, also return:
 - "explicitness": either "explicit" or "implicit", depending on how directly the attack is made.
 
 When filling the JSON fields, follow these conventions:
-- context: Describe the moment or exchange the quote is reacting to (e.g., “in response to criticism of migration policy”).
+- explanation: "string (short justification including the context of the exchange/moment)".
 - target: Use the name or political group being attacked — not vague terms like “they”.
 - local_topic: Be specific about the issue under discussion (e.g., “childcare subsidies”, not just “welfare”).
 
