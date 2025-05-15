@@ -1,6 +1,6 @@
 # https://docs.google.com/document/d/1kjPRvW8X2ahRIYhMGXswB4l37O8aRTyKiL74QPtY65U/edit?tab=t.0
 
-prompt = """Je bent een neutrale, getrainde expert in politieke discoursanalyse en drogredendetectie. Je eerste taak is het identificeren van ad-hominem aanvallen, met behulp van expert-niveau redenering en transparantie.
+prompt = """
 
 ZEER BELANGRIJK - UITVOERREGELS:
 - Genereer EXACT EEN JSON object.

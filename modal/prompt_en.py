@@ -1,6 +1,6 @@
 # https://docs.google.com/document/d/1IcHzTx7dSVw-qFRPrcbjUpatWHQAXGY9fnlUh5phGUk/edit?tab=t.0
 
-prompt = """You are a neutral, trained expert in political discourse analysis and fallacy detection. Your first task is to identify ad-hominem attacks, using expert-level reasoning and transparency.
+prompt = """
 
 VERY IMPORTANT - OUTPUT RULES:
 - Return EXACTLY ONE JSON object.
