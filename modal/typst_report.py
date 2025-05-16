@@ -4,9 +4,6 @@ import subprocess
 import shutil
 import os
 
-from promt_en import prompt as PROMPT_TEMPLATE_EN
-from promt_nl import prompt as PROMPT_TEMPLATE_NL
-
 def get_prompt_hash(prompt, length=8):
     import hashlib
     hash_object = hashlib.sha256(str(prompt).encode())
@@ -63,7 +60,8 @@ def escape_for_typst(text: str) -> str:
 
 
 class TypstReport:
-    def __init__(self):
+    def __init__(self, text_key):
+        self.text_key = text_key
         if not shutil.which("typst"):
             raise EnvironmentError("Typst CLI is not installed or not in PATH.")
         # Install packages:
@@ -90,7 +88,7 @@ class TypstReport:
         self.content += f"== Test {test_data.get('id', '-')}\n\n"
 
         if kwargs.get("show_speech", True):
-            speech = escape_for_typst(str(test_data['Speech']))
+            speech = escape_for_typst(str(test_data[self.text_key]))
             self.content += f"*Speech:* {speech}\n\n"
 
         if kwargs.get("show_true_label", True):
@@ -123,7 +121,7 @@ class TypstReport:
     def save(self, typst_path="report.typ", pdf_path="report.pdf"):
         with open(typst_path, "w", encoding="utf-8") as f:
             f.write(self.content)
-        #subprocess.run(["typst", "compile", typst_path, pdf_path], check=True)
+        subprocess.run(["typst", "compile", typst_path, pdf_path], check=True)
 
 if __name__ == "__main__":
     datasets = [

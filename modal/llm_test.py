@@ -15,7 +15,7 @@ class LLM_TEST:
 
     def __init__(self, prompt=None, df=None, parse_function=None, system_prompt=None, model=None, quant=None, ollama=False,
                  hf_token=None, dataset_nick_name=None, prompt_nick_name=None, text_key="Speech", row_range=None, row_count=None, 
-                 multithreads=1, TIME_ZONE = "Europe/Amsterdam", timeout=60 * 3, batch_size=10, dir_path=None):
+                 multithreads=1, TIME_ZONE = "Europe/Amsterdam", timeout=60 * 3, batch_size=10, dir_path=None, truth_lable_name=None):
 
         self.prompt = prompt
         self.df = df
@@ -35,6 +35,7 @@ class LLM_TEST:
         self.timeout = timeout
         self.batch_size = batch_size
         self.dir_path = dir_path
+        self.truth_lable_name = truth_lable_name
 
         
 
@@ -46,7 +47,7 @@ class LLM_TEST:
         self.df_lock_file = self.generate_file_name(dir_path, "lock")
         # Prepair df
         # Add missing columns
-        for col in [ "duration", "energy", "raw"]:
+        for col in [ "duration", "energy", "raw", "is_timeout"]:
             if col not in self.df.columns:
                 self.df[col] = None  # or use np.nan if you're doing numerical operations
         df["power-samples"] = pd.Series(dtype="object")
@@ -56,7 +57,7 @@ class LLM_TEST:
     def __copy__(self):
         raise RuntimeError("Copies are not allowed—object bound to its original container.")
     
-    def write_df(self, function):
+    def write_df(self, function,params):
         """
         This method makes sure the result is saved with the appropriate fail-saves
         """
@@ -65,7 +66,7 @@ class LLM_TEST:
             fcntl.flock(lock_file, fcntl.LOCK_EX)
             try:
                 self.df = pd.read_csv(self.df_file_name)
-                result = function()
+                result = function(params)
                 self.df.to_csv(self.df_file_name, index=False)
             finally:
                 fcntl.flock(lock_file, fcntl.LOCK_UN)
@@ -76,7 +77,7 @@ class LLM_TEST:
         This method makes sure the result is saved with the appropriate fail-saves
         """
         # This blocks other read's -> avoids access to the file at the same time
-        def manipulation():
+        def manipulation(tralala):
             for update in update_list:
                 idx = update["index"]
                 del update["index"]
@@ -97,7 +98,7 @@ class LLM_TEST:
                 self.df["power-samples"] = self.df["power-samples"].astype("object")
                 self.df.at[idx, "power-samples"] = update["power-samples"]
                 self.df.at[idx, "is_timeout"] = update["is_timeout"]
-        self.write_df(manipulation)
+        self.write_df(manipulation, None)
 
     def get_compute_batch(self, batch_size=None):
         """
@@ -106,15 +107,20 @@ class LLM_TEST:
         """
         if batch_size is None:
             batch_size = self.batch_size
-        assert batch_size < len(self.df), "ERROR: batch size is bigger than data"
+        # assert batch_size < len(self.df), "ERROR: batch size is bigger than data"
 
-        def manipulation():
+        def manipulation(batch_size):
             # Ensure the dtype is compatible with strings
             if self.df["raw"].dtype != "object":
                 self.df["raw"] = self.df["raw"].astype("object")
 
             # Step 1: Filter out rows that are already "processing..."
             available_df = self.df[self.df["raw"] != "processing..."]
+
+            # Handle end case, when available df is smaller than batch size
+            if len(available_df) < batch_size:
+                print("in get_compute_batch: Congrats final run detected!!")
+                batch_size = len(available_df)
 
             # Step 2: Take a random sample
             sample = available_df.sample(n=batch_size, random_state=42)
@@ -125,7 +131,7 @@ class LLM_TEST:
             # Step 4: Return indices of the sampled rows
             return sample.index
 
-        return self.write_df(manipulation)
+        return self.write_df(manipulation, batch_size)
 
     def compute_forecast_report(self, start_time, GPU_INFO, GPU_CONFIG):
         import time
@@ -256,30 +262,35 @@ class LLM_TEST:
         self.len_unclassified = len_unclassified
     def compute_results(self):
         import pandas as pd
-        from sklearn.metrics import accuracy_score
+        from sklearn.metrics import accuracy_score, precision_score, recall_score, f1_score
 
-
+        
         self.df["predicted"] = self.df["result"].apply(self.parse_function)
 
         self.len_unclassified = len(self.df[self.df["predicted"]== "Unknown"])
-        self.df = self.df[self.df["predicted"] != "Unknown"]
+        self.known_df  = self.df[self.df["predicted"] != "Unknown"]
 
         # Now make types consistent
-        self.df["truth_label"] = self.df["Label"] != "No Ad Hominem"
-        self.df["predicted"] = self.df["predicted"] != "No Ad Hominem"
+        self.known_df["truth_label"] = self.known_df[self.truth_lable_name] != "No Ad Hominem"
+        self.known_df["predicted"] = self.known_df["predicted"] != "No Ad Hominem"
     
-        self.accuracy = accuracy_score(self.df["truth_label"], self.df["predicted"])
-        self.precision_score = precision_score(self.df["truth_label"], self.df["predicted"], zero_division=0),
-        self.recall_score = recall_score(self.df["truth_label"], self.df["predicted"], zero_division=0),
-        self.f1_score = f1_score(self.df["truth_label"], self.df["predicted"], zero_division=0),
+        self.accuracy = accuracy_score(self.known_df["truth_label"], self.known_df["predicted"])
+        self.precision_score = precision_score(self.known_df["truth_label"], self.known_df["predicted"], zero_division=0)
+        self.recall_score = recall_score(self.known_df["truth_label"], self.known_df["predicted"], zero_division=0)
+        self.f1_score = f1_score(self.known_df["truth_label"], self.known_df["predicted"], zero_division=0)
+
+        print(f"Accuracy: {self.accuracy}")
+        print(f"Precision: {self.precision_score}")
+        print(f"Recall: {self.recall_score}")
+        print(f"F1 Score: {self.f1_score}")
 
     def plot_confusion_matrix(self, path="confusion_matrix.png"):
         from sklearn.metrics import confusion_matrix, accuracy_score
         import seaborn as sns
         import matplotlib.pyplot as plt
 
-        y_true = self.df["truth_label"]
-        y_pred = self.df["predicted"]
+        y_true = self.known_df["truth_label"]
+        y_pred = self.known_df["predicted"]
 
         # Use boolean labels for computation
         labels = [False, True]
@@ -326,14 +337,16 @@ class LLM_TEST:
         import os
         import time
 
-        report = TypstReport()
+        report = TypstReport(self.text_key)
         confusion_matrix_path = self.plot_confusion_matrix(path=f'confusion_matrix.png')
         #plot_power_path = self.plot_power_samples(power_samples, output_path=f'power_plot.png')
 
         params = self.compute_forecast_report(start_time=start_time, GPU_INFO=GPU_INFO, GPU_CONFIG=GPU_CONFIG)
+        print("params: ", params)
         self.duration = time.time() - start_time
         self.cost = params["estimated_cost"]
         self.energy = params["estimated_total_energy"]
+
         # Open csv file
         # Generate unique identifier
         prompt_hash = str(get_prompt_hash(self.prompt))
@@ -345,6 +358,7 @@ class LLM_TEST:
                 ("Dataset", self.dataset_nick_name),
                 ("Date & Time", now),
                 ("Duration (s)", f"{self.duration:.2f}"),
+
                 (r"Cost (\$)", f"{self.cost:.2f}"),
                 ("Accuracy", f"{(self.accuracy * 100):.2f}%"),
                 ("Unparsed ", self.len_unclassified),
@@ -353,23 +367,32 @@ class LLM_TEST:
             ]
         report.add_general_info(info,[confusion_matrix_path])# plot_power_path])
 
-        self.df["cleaned_output"] = self.df["result"].apply(self.clean_result)
-        for _, test in self.df.iterrows():
+        self.df["cleaned_output"] = self.df["result"]
+        for _, test in self.known_df.iterrows():
             report.add_test(test)
         path = f"results_{self.prompt_language}_{self.dataset_language}_{self.model}_{now}".replace("/","_")
+        print("dir_path: ", self.dir_path, "path: ", path)
         out_path = os.path.join(self.dir_path, path)
         report.save(f"{out_path}.typ", f"{out_path}.pdf")
 
-    def generate_tk_report(self, metrics=None):
+    def generate_tk_report(self, start_time,GPU_INFO, GPU_CONFIG):
         from typst_report import TypstReport, get_prompt_hash
         from datetime import datetime
         from zoneinfo import ZoneInfo
         import os
+        import time
         
-        report = TypstReport()
+        report = TypstReport(self.text_key)
         prompt_hash = str(get_prompt_hash(self.prompt))
         now = datetime.now(ZoneInfo(self.TIME_ZONE)).strftime("%Y-%m-%d %H:%M:%S")
-        
+        confusion_matrix_path = self.plot_confusion_matrix(path=f'confusion_matrix.png')
+        params = self.compute_forecast_report(start_time=start_time, GPU_INFO=GPU_INFO, GPU_CONFIG=GPU_CONFIG)
+
+        self.duration = time.time() - start_time
+        self.cost = params["estimated_cost"]
+        self.energy = params["estimated_total_energy"]
+        self.avg_duration= params["avg_duration"]
+
         # Count timeouts
         timeout_count = self.df["is_timeout"].sum()
         
@@ -387,6 +410,7 @@ class LLM_TEST:
             ("Date & Time", now),
             ("Number of Speeches", len(self.df)),
             ("Duration (s)", f"{self.duration:.2f}"),
+            ("Average duration: ", self.avg_duration),
             (r"Cost (\$)", f"{self.cost:.2f}"),
             ("Electricity Usage (J)", f"{self.energy:.2f}"),
             ("Ad Hominem Attacks", f"{total_attacks} ({attack_percentage:.1f}%)"),
@@ -394,47 +418,49 @@ class LLM_TEST:
             ("n tests", len(self.df)),
             ("Timeouts", timeout_count),
             ("Accuracy", f"{self.accuracy * 100:.1f}%"),
-            ("Precision", f"{self.precision_score * 100:.1f}%"),
-            ("Recall", f"{self.recall_score * 100:.1f}%"),
-            ("F1 Score", f"{self.f1_score * 100:.1f}%")
+           ("Precision", f"{self.precision_score * 100:.1f}%"),
+           ("Recall", f"{self.recall_score * 100:.1f}%"),
+           ("F1 Score", f"{self.f1_score * 100:.1f}%")
         ]
-        # Convert graph paths to relative paths
-        relative_graph_paths = [os.path.basename(path) for path in graph_paths if path]
-        report.add_general_info(info, relative_graph_paths)
+        #Convert graph paths to relative paths
+        #relative_graph_paths = [os.path.basename(path) for path in graph_paths if path]
+        report.add_general_info(info, [confusion_matrix_path])
 
         # Process each speech for the report with special handling for timeouts
-        for _, speech in self.df.iterrows():
-            result_to_display = None
+        # for _, speech in self.df.iterrows():
+        #     result_to_display = None
             
-            # Handle timeout cases
-            if speech.get('is_timeout', 0) == 1:
-                result_to_display = {
-                    "status": "timeout",
-                    "raw_result": {
-                        "timeout_error": "Inference timed out",
-                        "is_timeout": True
-                    }
-                }
-            else:
-                # For non-timeout cases, try to clean the result
-                try:
-                    result_to_display = self.clean_result(speech["result"]) if isinstance(speech["result"], str) else speech["result"]
-                except Exception:
-                    result_to_display = {
-                        "status": "error",
-                        "raw_result": {
-                            "parsing_error": "Unable to parse JSON output",
-                            "raw_output": str(speech["result"])[:500] + "..." if len(str(speech["result"])) > 500 else str(speech["result"])
-                        }
-                    }
+        #     # Handle timeout cases
+        #     if speech.get('is_timeout', 0) == 1:
+        #         result_to_display = {
+        #             "status": "timeout",
+        #             "raw_result": {
+        #                 "timeout_error": "Inference timed out",
+        #                 "is_timeout": True
+        #             }
+        #         }
+        #     else:
+        #         # For non-timeout cases, try to clean the result
+        #         try:
+        #             result_to_display = self.clean_result(speech["result"]) if isinstance(speech["result"], str) else speech["result"]
+        #         except Exception:
+        #             result_to_display = {
+        #                 "status": "error",
+        #                 "raw_result": {
+        #                     "parsing_error": "Unable to parse JSON output",
+        #                     "raw_output": str(speech["result"])[:500] + "..." if len(str(speech["result"])) > 500 else str(speech["result"])
+        #                 }
+        #             }
             
-            report.add_test({
-                "Speech": speech["speech_text"],
-                "Speaker": speech["speaker_name"],
-                "Party": speech["speaker_party"],
-                "Result": result_to_display
-            })
+        #     report.add_test({
+        #         "Speech": speech["speech_text"],
+        #         "Speaker": speech["speaker_name"],
+        #         "Party": speech["speaker_party"],
+        #         "Result": result_to_display
+        #     })
         path = f"report_tk_debate_{self.prompt_language}_{self.dataset_language}_{self.model}_{now}".replace("/","_")
+        print("dir_path: ", self.dir_path)
+        print("path: ", path)
         out_path = os.path.join(self.dir_path, path)
         report.save(f"{out_path}.typ", f"{out_path}.pdf")
 

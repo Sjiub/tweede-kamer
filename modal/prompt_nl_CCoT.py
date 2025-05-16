@@ -1,5 +1,4 @@
 prompt = """
-
 ZEER BELANGRIJK - UITVOERREGELS:
 - Genereer EXACT EEN JSON object.
 - GEEN extra tekst voor of na de JSON.
@@ -133,4 +132,3 @@ Als er geen ad-hominem aanvallen zijn gevonden:
 
 Tekst om te analyseren:
 {text}"""
-

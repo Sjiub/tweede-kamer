@@ -93,6 +93,16 @@ def download_model(llm_test):
     import shutil
     from llm_test import LLM_TEST
 
+        
+    from llm_test import LLM_TEST
+    from llama_cpp import Llama
+    llm = Llama.from_pretrained(
+    repo_id="Mungert/gemma-3-27b-it-GGUF",
+    filename="gemma-3-27b-it-q4_0.gguf",
+    cache_dir=ollama_dir  # <-- your custom location
+    )
+    return ollama_dir + "/" + "gemma-3-27b-it-q4_0.gguf"
+
     print("📦 Downloading model from:", repo_id)
     model_path = snapshot_download(llm_test.model, local_dir=cache_dir, token=llm_test.hf_token)
     gguf_files = glob.glob(os.path.join(model_path, "*.gguf"))
@@ -153,6 +163,60 @@ def llama_cpp_inference(llm, gguf_path: str, prompt: str, n_predict: int = -1,DE
         #temperature=0,
     )
     return response["choices"][0]["message"]["content"]
+
+@app.function(
+    image=download_image,
+    timeout=60 * 60,
+    volumes={
+        results_dir: results,
+        ollama_dir: model_cache
+        },
+    gpu=GPU_CONFIG)
+def llama_cpp_inference_batch(llm, list_msg, timeout, temperature=0):
+    import ollama
+    import subprocess
+    import os
+    import time
+    import threading
+    
+    from llama_cpp import Llama
+    
+    llm = Llama(
+        model_path=f'{ollama_dir}/models--Mungert--gemma-3-27b-it-GGUF/blobs/f3b2259712093260f0f5336d879c8270f23429d1693f6ae5b756086d2c695668',
+        n_ctx=4096,
+        n_gpu_layers=-1,
+        )
+#sha256-1fa8532d986d729117d6b5ac2c884824d0717c9468094554fd1d36412c740cfc', n_ctx=4096, verbose=True)
+    monitor = threading.Thread(target=monitor_power, daemon=True)
+    monitor.start()
+
+    def call_llamacpp(message):
+        return llm.create_chat_completion(
+            messages=message, 
+            temperature=temperature,
+            top_k=64,
+            top_p=0.95,
+            stop=["<end_of_turn>"])
+    responses = []
+    for messages in list_msg:
+        start_time = time.time()
+        power_samples.clear()
+
+        raw = call_llamacpp(message=messages)
+        duration = time.time() - start_time
+        avg_power = sum(power_samples) / len(power_samples) if power_samples else 0
+        energy = avg_power * duration
+
+        responses.append({
+            "index": messages[-1]["index"],
+            "raw": raw,
+            "duration": duration,
+            "energy": energy,
+            "power-samples": power_samples.copy(),
+            "is_timeout": False
+        })
+
+    return responses
 @app.function(
     image=download_image,
     timeout=60 * 60,
@@ -261,9 +325,9 @@ def run_pipeline(llm_test, DEBUG=False):
         #process = subprocess.Popen(["ollama", "serve"])
     else:
         gguf_path = download_model.remote(llm_test)
-        llm = Llama(model_path=gguf_path, n_gpu_layers=-1, n_ctx=4096, verbose=DEBUG)
+        #llm = Llama(model_path=gguf_path, n_gpu_layers=-1, n_ctx=4096, verbose=DEBUG)
+        pass
 
-    # TODO handle error-case where data gets smaller then batch size
     def process_batch():
         indices = llm_test.get_compute_batch()
         query = []
@@ -285,13 +349,15 @@ def run_pipeline(llm_test, DEBUG=False):
                 for row in rows[llm_test.text_key]
             ])
             query.append(messages)
-
-        results = ollama_inference.remote(llm_test.model, query, llm_test.timeout)
+        if llm_test.ollama:
+            results = ollama_inference.remote(llm_test.model, query, llm_test.timeout)
+        else:
+            results = llama_cpp_inference_batch.remote(llm_test.model, query, llm_test.timeout)
         llm_test.write_result(results)
         llm_test.compute_forecast_report(start_time, GPU_INFO, GPU_CONFIG)  
 
-        
-    # Inference execution
+  
+    #Inference execution
     with ThreadPoolExecutor(max_workers=llm_test.multithreads) as executor:
         futures = [executor.submit(process_batch) for _ in range(llm_test.multithreads)]
 
@@ -302,7 +368,7 @@ def run_pipeline(llm_test, DEBUG=False):
                 print(f"A thread failed with error: {e}")
             
     llm_test.compute_results()
-    llm_test.generate_report_labled_data(start_time, GPU_INFO, GPU_CONFIG )#power_samples)
+    llm_test.generate_tk_report(start_time, GPU_INFO, GPU_CONFIG )#power_samples)
     return llm_test
 
 def compute_results(llm_test):
@@ -403,7 +469,7 @@ def run_all_evaluations():
     # # Use the same indices to sample both dataframes
     # sampled_en = df.loc[sampled_indices]
     # sampled_nl = df_nl.loc[sampled_indices]
-    df, prompt_config, strategy_suffix, prompt_type = prep_data(prompt_type="ccot_en", sample_strategy="specific", specific_indices=[71, 72, 73, 74, 75])
+    df, prompt_config, strategy_suffix, prompt_type = prep_data(prompt_type="ccot_nl", sample_strategy="random", sample_size=200)#specific_indices=[71, 72, 73, 74, 75])
 
     def extract_predicted_label(result):
         json
@@ -423,21 +489,25 @@ def run_all_evaluations():
     llm_test = LLM_TEST( 
         prompt=prompt_config['prompt'], 
         df=df, 
-        system_prompt="You are an expert in analyzing political texts. Analyze the text below for ad-hominem attacks.",
+        system_prompt="Je bent een neutrale, getrainde expert in politieke discoursanalyse en drogredendetectie. Je eerste taak is het identificeren van ad-hominem aanvallen, met behulp van expert-niveau redenering en transparantie.",#"You are an expert in analyzing political texts. Analyze the text below for ad-hominem attacks.",
         text_key="speech_text",
+        truth_lable_name="final_label",
         parse_function=extract_predicted_label, 
-        model="mistral-small3.1", 
-        ollama=True,
-        dataset_nick_name=f"tk_debate_{"mistral-small3.1".lower()}_{prompt_type}{strategy_suffix}",
-        prompt_nick_name="Prototype_prompt", 
+        model="Mungert/gemma-3-27b-it-GGUF",#"mistral-small3.1", 
+        ollama=False,
+        hf_token="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",
+        quant="Q4_K_M",
+        dataset_nick_name=f"tweede_kamer_debate",
+        
+        prompt_nick_name="ccot_nl", 
         # howmany rows are being feed into the llm at once
         row_count=1,
         # How many element should be in a batch
-        batch_size=2,
+        batch_size=50,
         # In how many threads/container the program should run
         multithreads=2,
-        dir_path=results_dir,
-        timeout=0.5
+        dir_path="/root/results",
+        timeout=4*60
     )
     # test execution
     run_pipeline(llm_test)
