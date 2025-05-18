@@ -81,12 +81,18 @@ class LLM_TEST:
             for update in update_list:
                 idx = update["index"]
                 del update["index"]
+                self.df["is_timeout"] = self.df["is_timeout"].astype("boolean")
+                is_timeout = bool(update["is_timeout"])
+                self.df.at[idx, "is_timeout"] = is_timeout
+                
+                if not is_timeout:
+                    try:
+                        update["result"] = self.extract_message(update["raw"])
+                    except Exception as e:
+                        print("error: ", str(e))
+                        update["result"] = e
 
-                try:
-                    update["result"] = self.clean_result(update["raw"])
-                except Exception as e:
-                    update["result"] = e
-                self.df.at[idx, "raw"] = update["raw"]
+                self.df.at[idx, "raw"] = update
                 self.df.at[idx, "duration"] = update["duration"]
                 # Ensure 'result' column is ready for storing dicts
                 if "result" not in self.df.columns:
@@ -97,7 +103,7 @@ class LLM_TEST:
                 self.df.at[idx, "energy"] = update["energy"]
                 self.df["power-samples"] = self.df["power-samples"].astype("object")
                 self.df.at[idx, "power-samples"] = update["power-samples"]
-                self.df.at[idx, "is_timeout"] = update["is_timeout"]
+
         self.write_df(manipulation, None)
 
     def get_compute_batch(self, batch_size=None):
@@ -114,9 +120,12 @@ class LLM_TEST:
             if self.df["raw"].dtype != "object":
                 self.df["raw"] = self.df["raw"].astype("object")
 
-            # Step 1: Filter out rows that are already "processing..."
-            available_df = self.df[self.df["raw"] != "processing..."]
+            # Step 1: Filter out rows where 'raw' is NaN (i.e., not being processed yet)
+            available_df = self.df[pd.isna(self.df["raw"])]
 
+            # Step 2: If no rows are available, return None
+            if available_df.index.empty:
+                return available_df.index[:0], available_df.index[:0] 
             # Handle end case, when available df is smaller than batch size
             if len(available_df) < batch_size:
                 print("in get_compute_batch: Congrats final run detected!!")
@@ -129,7 +138,7 @@ class LLM_TEST:
             self.df.loc[sample.index, "raw"] = "processing..."
 
             # Step 4: Return indices of the sampled rows
-            return sample.index
+            return sample.index, available_df.index
 
         return self.write_df(manipulation, batch_size)
 
@@ -145,7 +154,7 @@ class LLM_TEST:
             return
 
         # Identify unfinished and finished rows
-        unfinished_mask = self.df["raw"].isna() | (self.df["raw"] == "processing...")
+        unfinished_mask = self.df["raw"].isna()
         finished_mask = ~unfinished_mask
 
         finished_count = finished_mask.sum()
@@ -217,7 +226,8 @@ class LLM_TEST:
         path = f"results_{self.prompt_language}_{self.dataset_language}_{self.model}_{now}.{file_type}".replace("/","_")
         out_path = os.path.join(dir_path,path)
         return out_path
-    def clean_result(self,text: str):
+    @staticmethod
+    def clean_result(text: str):
         """
             Multiple ways to resolve different ways a llm might return json.
             1. normal
@@ -227,7 +237,11 @@ class LLM_TEST:
         import json
         import ast
         import re
-        text = str(text).strip()
+        if not isinstance(text, str):
+            if isinstance(text, dict):
+                raise Exception("Passing already parsed json to cleaner function")
+            else:
+                raise Exception(f"Unexpected type of str: {type(text)}, {text}")
         # Try to extract JSON block from markdown-style ```json ... ``` block
         if re.search(r'```json\b', text, re.IGNORECASE):
             try:
@@ -235,22 +249,35 @@ class LLM_TEST:
                 if match:
                     json_str = match.group(1).strip()
                     return json.loads(json_str)
-            except Exception:
-                pass
+            except Exception as e:
+                print("Format ```json(...)``` not valid, attemting different decoding method")
 
         # Try raw JSON
         try:
             return json.loads(text)
         except Exception:
-            pass
+            print("Format json.loads not valid, attemting different decoding method")
 
         # Try using ast.literal_eval for single-quoted "JSON"
         try:
             return ast.literal_eval(text)
-        except Exception:
-            pass
+        except Exception as e:
+            print(f"Format ast.literal_eval(...) not valid: {e}")
 
-        raise ValueError("Unable to parse JSON from text.")
+        raise ValueError(f"Unable to parse JSON from text: {text}")
+    def extract_message(self, data):
+        if isinstance(data,str):
+            data = self.clean_result(data)
+            if "choices" in data:
+                return data["choices"][0]["message"]['content']
+            elif 'message' in data: 
+                return data["message"]['content']
+            else:
+                return data
+        else:
+            if "message" in data:
+                return self.clean_result(data["message"]['content'])
+            raise Exception("Extract_message: unexpected input:", data)
     def save_test(self, energy=None, duration=None, cost=None):
         self.energy = energy
         self.duration = duration
@@ -264,11 +291,11 @@ class LLM_TEST:
         import pandas as pd
         from sklearn.metrics import accuracy_score, precision_score, recall_score, f1_score
 
-        
-        self.df["predicted"] = self.df["result"].apply(self.parse_function)
+        self.known_df = self.df.dropna()
+        self.known_df["predicted"] = self.known_df["result"].apply(self.parse_function)
 
-        self.len_unclassified = len(self.df[self.df["predicted"]== "Unknown"])
-        self.known_df  = self.df[self.df["predicted"] != "Unknown"]
+        self.len_unclassified = len(self.known_df[self.known_df["predicted"]== "Unknown"])
+        self.known_df  = self.known_df[self.known_df["predicted"] != "Unknown"]
 
         # Now make types consistent
         self.known_df["truth_label"] = self.known_df[self.truth_lable_name] != "No Ad Hominem"
@@ -374,6 +401,36 @@ class LLM_TEST:
         print("dir_path: ", self.dir_path, "path: ", path)
         out_path = os.path.join(self.dir_path, path)
         report.save(f"{out_path}.typ", f"{out_path}.pdf")
+
+    def do_runtime_stats():
+        new_df = self.df.dropna(subset=["raw"])
+        new_df["runtime"] = new_df["raw"].apply(self.clean_result)["runtime"]
+        
+    def do_inference_stats():
+        # Extract relevant runtime info from any row
+        runtime_info = self.df["raw"].iloc[0].get("message", {}).get("runtime", {})
+
+        inference_stats = [
+            ("Prompt tokens", runtime_info.get("prompt_tokens")),
+            ("Generation tokens", runtime_info.get("generation_tokens")),
+            ("Total tokens", runtime_info.get("total_tokens")),
+            ("Prompt time (ms)", runtime_info.get("prompt_time_ms")),
+            ("Generation time (ms)", runtime_info.get("generation_time_ms")),
+            ("Total time (ms)", runtime_info.get("total_time_ms")),
+            ("Tokens/sec (prompt)", round(runtime_info.get("prompt_tokens", 0) / (runtime_info.get("prompt_time_ms", 1) / 1000), 2)),
+            ("Tokens/sec (generation)", round(runtime_info.get("generation_tokens", 0) / (runtime_info.get("generation_time_ms", 1) / 1000), 2)),
+            ("Model GGUF Version", runtime_info.get("gguf_version")),
+            ("Model File Type", runtime_info.get("file_type")),
+            ("Quantization Version", runtime_info.get("quantization_version")),
+            ("Layers Offloaded", f"{runtime_info.get('layers_offloaded', 0)} / {runtime_info.get('total_layers', '?')}"),
+            ("Batch Size", runtime_info.get("n_batch")),
+            ("Context Size", runtime_info.get("n_ctx")),
+            ("UBatch Size", runtime_info.get("n_ubatch")),
+            ("KV Size", runtime_info.get("kv_size")),
+        ]
+
+        return inference_stats
+
 
     def generate_tk_report(self, start_time,GPU_INFO, GPU_CONFIG):
         from typst_report import TypstReport, get_prompt_hash

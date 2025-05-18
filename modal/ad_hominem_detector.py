@@ -61,12 +61,8 @@ download_image = (
     "mv typst-x86_64-unknown-linux-musl/typst /usr/local/bin/"
     ])
     .entrypoint([])
-    #.env({"OLLAMA_MODELS":ollama_dir})
     .env({"LD_LIBRARY_PATH":"/app/:$LD_LIBRARY_PATH"},)
-    .env({"HUGGINGFACE_HUB_TOKEN":"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"})
-    #.run_commands(f"OLLAMA_MODELS={ollama_dir} ollama serve &")
     # Add files
-    #.add_local_dir(".", remote_path="/root/ad-hominem")
     .add_local_file("sample_data_english.csv", remote_path="/root/sample_data_english.csv")
     .add_local_file("sample_data_dutch.csv", remote_path="/root/sample_data_dutch.csv")
     .add_local_file("merged_annotations.csv", remote_path="/root/merged_annotations.csv")
@@ -77,6 +73,7 @@ download_image = (
     .add_local_python_source("typst_report")
     .add_local_python_source("progress_bar")
     .add_local_python_source("llm_test")
+    .add_local_python_source("woke_llama")
     .add_local_python_source("prompt_en_zeroshot")
     .add_local_python_source("prompt_en_fewshot")
     .add_local_python_source("prompt_en_CCoT")
@@ -175,180 +172,31 @@ def llama_cpp_inference(llm, gguf_path: str, prompt: str, n_predict: int = -1,DE
         ollama_dir: model_cache
         },
     gpu=GPU_CONFIG)
-def llama_cpp_inference_batch(llm, list_msg, timeout, temperature=0):
-    import ollama
-    import subprocess
+def llama_cpp_inference_batch(llm, list_msg, timeout, verbose=True, temperature=0):
+    from woke_llama import Woke_LLama
     import os
-    import time
-    import threading
-    
-    # from llama_cpp import Llama
-    
-    # llm = Llama(
-    #     model_path=f'{ollama_dir}/models--Mungert--gemma-3-27b-it-GGUF/blobs/f3b2259712093260f0f5336d879c8270f23429d1693f6ae5b756086d2c695668',
-    #     n_ctx=4096,
-    #     n_gpu_layers=-1,
-    #     )
-    from jinja2 import Template
-    import sys
 
-    def render_prompt(messages, chat_template="gemma3"):
-        """
-        Renders a chat prompt using Gemma 3-style formatting:
-        <bos><start_of_turn>user ...<end_of_turn>
-        <start_of_turn>model ...<end_of_turn>
-        ...
-        Appends a final <start_of_turn>model\n to indicate LLM should continue.
-        """
-        prompt = ""
+    # Original long path
+    long_model_path = f'{ollama_dir}/models--Mungert--gemma-3-27b-it-GGUF/blobs/f3b2259712093260f0f5336d879c8270f23429d1693f6ae5b756086d2c695668'
+    # Shorter, safe path for llama.cpp
+    short_model_path = '/app/model.gguf'
 
-        for message in messages:
-            role = message["role"]
-            content = message["content"].strip()
-            prompt += f"<start_of_turn>{role}\n{content}<end_of_turn>\n"
+    # Create symlink if it doesn't already exist
+    if not os.path.exists(short_model_path):
+        os.symlink(long_model_path, short_model_path)
 
-        # Add opening for model response
-        prompt += "<start_of_turn>model\n"
-        return prompt
-
-#sha256-1fa8532d986d729117d6b5ac2c884824d0717c9468094554fd1d36412c740cfc', n_ctx=4096, verbose=True)
-    monitor = threading.Thread(target=monitor_power, daemon=True)
-    monitor.start()
-    def extract_model_json_block(text):
-        start_marker = "\nmodel"
-        end_marker = "[end of text]"
-
-        start_index = text.find(start_marker)
-        end_index = text.find(end_marker)
-
-        if start_index == -1 or end_index == -1:
-            raise ValueError("Markers not found in text.")
-
-        # Extract the block exactly as it appears between the markers
-        block = text[start_index + len(start_marker):end_index].strip()
-
-        return block
-
-
-
-    # Doc: https://docs.unsloth.ai/basics/gemma-3-how-to-run-and-fine-tune
-    # https://blog.steelph0enix.dev/posts/llama-cpp-guide/#llama-cli
-    def run_llama_cli_chat(
-        messages,
-        model_path,
+    woke_llama = Woke_LLama(
         llama_cli_path="/app/llama-cli",
-        temperature=0,
-        top_k=64,
-        top_p=0.95,
-        repeat_penalty=1,
-        min_p=0.01,
-        n_gpu_layers=-1,
-        threads=None,
-        ctx_size=16384,
-        seed=3407,
-        prio=2,
-        timeout=timeout
-    ):
-        """
-        Calls llama-cli with a Gemma-style prompt. Only includes CLI args that are set.
-        Outputs logs directly to terminal.
-        """
-        # Start building command
-        cmd = [
-            llama_cli_path,
-            "--model", model_path
-        ]
+        gguf_path=short_model_path
+    )
 
-        # Conditionally add optional arguments
-        if threads is not None:
-            cmd += ["--threads", str(threads)]
-        if ctx_size is not None:
-            cmd += ["--ctx-size", str(ctx_size)]
-        if n_gpu_layers is not None:
-            cmd += ["--n-gpu-layers", str(n_gpu_layers)]
-        if seed is not None:
-            cmd += ["--seed", str(seed)]
-        if prio is not None:
-            cmd += ["--prio", str(prio)]
-        if temperature is not None:
-            cmd += ["--temp", str(temperature)]
-        if repeat_penalty is not None:
-            cmd += ["--repeat-penalty", str(repeat_penalty)]
-        if min_p is not None:
-            cmd += ["--min-p", str(min_p)]
-        if top_k is not None:
-            cmd += ["--top-k", str(top_k)]
-        if top_p is not None:
-            cmd += ["--top-p", str(top_p)]
-
-        # Always include this flag (optional: make it conditional too)
-        cmd += ["-no-cnv"]
-
-        # Render prompt with Gemma chat format
-        prompt = render_prompt(messages)
-        cmd += ["--prompt", prompt]
-        try:
-            # Use a temporary file or PIPE for capturing output if needed
-            print("TP 0")
-            process = subprocess.Popen(
-                cmd,
-                stdout=subprocess.PIPE,
-                stderr=sys.stderr,
-                text=True
-            )
-
-            captured_output = []
-
-            for line in process.stdout:
-                print(line, end='')          # Print to console
-                captured_output.append(line) # Capture output
-
-            process.wait()
-
-            output = ''.join(captured_output).strip()
-            return {
-                "message": {"content": extract_model_json_block(output)},
-                "error": "",
-                "status": ""
-            }
-
-        except subprocess.TimeoutExpired:
-            print("output llm: Timeout")
-            return {
-                "message": {"content": ""},
-                "error": "LLM process timed out and was terminated.",
-                "status": -1
-            }
-
-        except Exception as e:
-            print("output llm: Error -> ", str(e))
-            return {
-                "message": {"content": ""},
-                "error": str(e),
-                "status": -2
-            }
     responses = []
     for messages in list_msg:
-        start_time = time.time()
-        power_samples.clear()
-
-        result = run_llama_cli_chat(
-            messages=messages,
-            model_path=f'{ollama_dir}/models--Mungert--gemma-3-27b-it-GGUF/blobs/f3b2259712093260f0f5336d879c8270f23429d1693f6ae5b756086d2c695668',
-            temperature=0,
-            )
-        duration = time.time() - start_time
-        avg_power = sum(power_samples) / len(power_samples) if power_samples else 0
-        energy = avg_power * duration
-
-        responses.append({
-            "index": messages[-1]["index"],
-            "raw": result,
-            "duration": duration,
-            "energy": energy,
-            "power-samples": power_samples.copy(),
-            "is_timeout": result["status"] == -1
-        })
+        result = woke_llama.inference(messages=messages, timeout=timeout, verbose=verbose, temperature=0)
+        result["index"] = messages[-1]["index"]
+        result["is_timeout"] = result["status"] == -1
+        result["raw"] = result
+        responses.append(result)
 
     return responses
 @app.function(
@@ -463,45 +311,52 @@ def run_pipeline(llm_test, DEBUG=False):
         pass
 
     def process_batch():
-        #while True:
-        indices = llm_test.get_compute_batch()
-        #if indices.empty:
-        #    break
-        query = []
-        for idx in indices:
-            messages = []
-            # Add system prompt
-            if llm_test.system_prompt != None:
-                messages.append({'role': 'system', 'content': llm_test.system_prompt})
-            df = llm_test.get_df()
-            pos = df.index.get_loc(idx)  # Get integer position of index
-            start = max(0, pos - llm_test.row_count)
-            if pos == 0:
-                rows = df.iloc[[0]]
-            else:  # as DataFrame
-                rows = df.iloc[start:pos]
+        while True:
+            indices, available_df = llm_test.get_compute_batch()
+            if len(indices) == 0:
+                print("Terminating Runner ...")
+                break
+            else:
+                print(f"Total elements to cumpute: {len(llm_test.get_df())} already computed elements: {len(llm_test.get_df())- len(available_df)} still to compute elements: {len(available_df)}")
+            query = []
+            for idx in indices:
+                messages = []
+                # Add system prompt
+                if llm_test.system_prompt != None:
+                    messages.append({'role': 'system', 'content': llm_test.system_prompt})
+                df = llm_test.get_df()
+                
+                if idx - llm_test.row_count + 1 < 0:
+                    start = 0
+                else:
+                    start = idx - llm_test.row_count + 1
+                if idx == start:
+                    rows = df.iloc[[idx]]
+                else:  # as DataFrame
+                    rows = df.iloc[start:idx]
 
-            messages.extend([   
-                {'index': idx, 'role': 'user', 'content': llm_test.prompt.format(text=row)} 
-                for row in rows[llm_test.text_key]
-            ])
-            query.append(messages)
-        if llm_test.ollama:
-            results = ollama_inference.remote(llm_test.model, query, llm_test.timeout)
-        else:
-            results = llama_cpp_inference_batch.remote(llm_test.model, query, llm_test.timeout)
-        llm_test.write_result(results)
-        llm_test.compute_forecast_report(start_time, GPU_INFO, GPU_CONFIG)  
-    process_batch()
-    # #Inference execution
-    # with ThreadPoolExecutor(max_workers=llm_test.multithreads) as executor:
-    #     futures = [executor.submit(process_batch) for _ in range(llm_test.multithreads)]
+                messages.extend([   
+                    {'index': idx, 'role': 'user', 'content': llm_test.prompt.format(text=row)} 
+                    for row in rows[llm_test.text_key]
+                ])
 
-    #     for future in as_completed(futures):
-    #         try:
-    #             future.result()  # Wait for thread to complete
-    #         except Exception as e:
-    #             print(f"A thread failed with error: {e}")
+                query.append(messages)
+            if llm_test.ollama:
+                results = ollama_inference.remote(llm_test.model, query, llm_test.timeout)
+            else:
+                results = llama_cpp_inference_batch.remote(llm_test.model, query, llm_test.timeout, verbose=False)
+            llm_test.write_result(results)
+            llm_test.compute_forecast_report(start_time, GPU_INFO, GPU_CONFIG)  
+    
+    #Inference executionc
+    with ThreadPoolExecutor(max_workers=llm_test.multithreads) as executor:
+        futures = [executor.submit(process_batch) for _ in range(llm_test.multithreads)]
+
+        for future in as_completed(futures):
+            try:
+                future.result()  # Wait for thread to complete
+            except Exception as e:
+                print(f"A thread failed with error: {e}")
             
     llm_test.compute_results()
     llm_test.generate_tk_report(start_time, GPU_INFO, GPU_CONFIG )#power_samples)
@@ -586,7 +441,7 @@ def prep_data(prompt_type, sample_strategy="full", specific_indices=None, sample
 
 @app.function(
     image=download_image,
-    timeout=60 * 60,
+    timeout=60 * 60*2,
     volumes={
         results_dir: results,
         ollama_dir: model_cache
@@ -597,15 +452,7 @@ def run_all_evaluations():
     # from key import hf_token
     from llm_test import LLM_TEST
 
-    # df = pd.read_csv("sample_data_english.csv")
-    # df_nl = pd.read_csv("sample_data_dutch.csv")
-    # # Sample indices from one of the dataframes
-    # sampled_indices = df.sample(n=20, random_state=42).index
-
-    # # Use the same indices to sample both dataframes
-    # sampled_en = df.loc[sampled_indices]
-    # sampled_nl = df_nl.loc[sampled_indices]
-    df, prompt_config, strategy_suffix, prompt_type = prep_data(prompt_type="ccot_nl", sample_strategy="balanced", sample_size=2)#48)#specific_indices=[71, 72, prep_data(prompt_type="ccot_nl", sample_strategy="random", sample_size=200)#specific_indices=[71, 72, 73, 773, 74, 75])
+    df, prompt_config, strategy_suffix, prompt_type = prep_data(prompt_type="ccot_nl", sample_strategy="balanced", sample_size=10)#specific_indices=[71, 72, prep_data(prompt_type="ccot_nl", sample_strategy="random", sample_size=200)#specific_indices=[71, 72, 73, 773, 74, 75])
 
     def extract_predicted_label(result):
         json
@@ -620,7 +467,6 @@ def run_all_evaluations():
         except Exception as e:
             # Optional: print(e) for debugging
             return "Unknown"
-    print("len of df to compute: ", len(df))
     # Initialise the test, this is for datasharing between methods and is purly cosmetic ;)     
     llm_test = LLM_TEST( 
         prompt=prompt_config['prompt'], 
@@ -639,12 +485,14 @@ def run_all_evaluations():
         # howmany rows are being feed into the llm at once
         row_count=1,
         # How many element should be in a batch
-        batch_size=10,
+        batch_size=5,
         # In how many threads/container the program should run
         multithreads=2,
         dir_path="/root/results",
         timeout=4*60
     )
+    # Money before run 4981.54$ -> 4980.84 in reality. Program thought 0.36
+    # Second was 4978.73
     # test execution
     run_pipeline(llm_test)
 

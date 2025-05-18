@@ -1,27 +1,82 @@
-from llm_test import LLM_TEST
 import pandas as pd
 
 
+# Initialisation stage
+import modal
+from ad_hominem_detector import download_image
 
-# Initialise object
+# Specify name of program
+app = modal.App("ad-hominem-detector-Unit-test")
+# Specify GPU Used
+GPU_CONFIG = "L4"  # or "A10G", etc.
+TIME_ZONE = "Europe/Amsterdam"
 
-llm_test = LLM_TEST( 
-    prompt="PROMPT_TEMPLATE_EN", 
-    df=pd.DataFrame(), 
-    system_prompt="You are an expert in analyzing political texts. Analyze the text below for ad-hominem attacks.",
-    text_key="Speech",
-    parse_function=(), 
-    model="mistral-small3.1", 
-    ollama=True,
-    dataset_nick_name="US-Election", 
-    prompt_nick_name="Prototype_prompt", 
-    # howmany rows are being feed into the llm at once
-    row_count=1,
-    # Specify the range
-    row_range=None,
-    # In how many engines the program should run
-    multithreads=1
+# Initialise volumes
+model_cache = modal.Volume.from_name("ollama-models", create_if_missing=True)
+ollama_dir = "/opt/ai/models"
+
+results = modal.Volume.from_name("unittest-results", create_if_missing=True)
+results_dir = "/root/results"
+
+
+
+def find_llama_cli():
+    import subprocess
+    import os
+    try:
+        # Check if llama-cli is in PATH
+        path = subprocess.check_output(['which', 'llama-cli'], stderr=subprocess.DEVNULL).decode().strip()
+        if path:
+            print(f"'llama-cli' found in PATH at: {path}")
+            return path
+    except subprocess.CalledProcessError:
+        print("'llama-cli' not found in PATH. Searching the filesystem...")
+
+    # Fallback: Search the file system for the executable
+    search_root = '/'  # You can change this to '/home/youruser' to limit the scope
+    for root, dirs, files in os.walk(search_root):
+        if 'llama-cli' in files:
+            full_path = os.path.join(root, 'llama-cli')
+            print(f"'llama-cli' found at: {full_path}")
+            version = subprocess.check_output([full_path, "--version"], stderr=subprocess.DEVNULL).decode().strip()
+            print(f"version of llama-cli is: {version}")
+            return full_path
+
+    print("'llama-cli' not found anywhere on the system.")
+    return None
+
+
+# TODO verify that the test works correclty
+def define_test():
+    from llm_test import LLM_TEST
+    from ad_hominem_detector import prep_data
+    df, prompt_config, strategy_suffix, prompt_type = prep_data(prompt_type="ccot_nl", sample_strategy="balanced", sample_size=10)#48)#specific_indices=[71, 72, prep_data(prompt_type="ccot_nl", sample_strategy="random", sample_size=200)#specific_indices=[71, 72, 73, 773, 74, 75])
+    def parse_function():
+        pass
+    llm_test = LLM_TEST( 
+        prompt=prompt_config['prompt'], 
+        df=df, 
+        system_prompt="Je bent een neutrale, getrainde expert in politieke discoursanalyse en drogredendetectie. Je eerste taak is het identificeren van ad-hominem aanvallen, met behulp van expert-niveau redenering en transparantie.",#"You are an expert in analyzing political texts. Analyze the text below for ad-hominem attacks.",
+        text_key="speech_text",
+        truth_lable_name="final_label",
+        parse_function=parse_function, 
+        model="Mungert/gemma-3-27b-it-GGUF",#"mistral-small3.1", 
+        ollama=False,
+        hf_token="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",
+        quant="Q4_K_M",
+        dataset_nick_name=f"tweede_kamer_debate",
+        
+        prompt_nick_name="ccot_nl", 
+        # howmany rows are being feed into the llm at once
+        row_count=1,
+        # How many element should be in a batch
+        batch_size=10,
+        # In how many threads/container the program should run
+        multithreads=2,
+        dir_path="/root/results",
+        timeout=4*60
     )
+    return llm_test
 
 
 def check_types():
@@ -43,7 +98,68 @@ def check_types():
 
     print("All type checks passed.")
 
-# LLM
+# Verify that the test runtime works as expected
+def check_write_block(llm_test):
+    import time
+    import threading
+    import pandas as pd
+    import fcntl
+    import time
+    import os
+    llm_test.df_file_name = "test_file.csv"
+    llm_test.df_lock_file = "test_file.lock"
+    # Create the lock file if it doesn't exist
+    if not os.path.exists(llm_test.df_lock_file):
+        with open(llm_test.df_lock_file, "w") as f:
+            f.write("")
+    if not os.path.exists(llm_test.df_file_name):
+        pd.DataFrame(columns=["data"]).to_csv(llm_test.df_file_name, index=False)
+
+    def block_file(_):
+        llm_test.df = pd.DataFrame(["tp 1"], columns=["data"])
+        time.sleep(5)
+
+    def write_block_file(_):
+        llm_test.df.loc[len(llm_test.df)] = "tp 2"
+        time.sleep(1)
+
+    def refresh_df(_):
+        df = pd.read_csv(llm_test.df_file_name)
+        assert len(df) == 2, f"Error during writing to file: {df}"
+        print("check write block ok")
+
+
+    # Thread to run the concurrent writer
+    writer_thread = threading.Thread(target=lambda: llm_test.write_df(write_block_file, None))
+
+    # Start the blocking write
+    blocking_thread = threading.Thread(target=lambda: llm_test.write_df(block_file, None))
+    blocking_thread.start()
+
+    # Wait a moment and then start the concurrent writer
+    time.sleep(1)
+    writer_thread.start()
+
+    # Wait for both to finish
+    blocking_thread.join()
+    writer_thread.join()
+
+    # Evaluate results
+    llm_test.write_df(refresh_df, None)
+
+
+def check_compute_sampling(llm_test):
+    assert len(llm_test.get_df()) == 10
+    # draw 5 times a batch of 2
+    for i in range(5):
+        indices, available_df = llm_test.get_compute_batch(2)
+        # Check that indices are never none
+        assert len(indices) != 0, f"In run nr: {i}, emty indices {indices}"
+
+    # But now it has to be empty!
+    val = llm_test.get_compute_batch(1)
+    assert len(val) == 0,  f"Error indices should be empty but contains a value {val}"
+    print("Check compute ok")
 def timeout_check():
     pass
 def text_length():
@@ -62,9 +178,11 @@ def sampling_strategy_for_computation():
     # test that every speech is only once computed
     pass
 
-# Output generation
+# Edge cases, Test instances that don't fit the norm and might cause a problem in the analyisis
 
 
+
+# Check that the appropriate outputs are correctly generated
 
 
 def test_confusion_matrix():
@@ -72,3 +190,17 @@ def test_confusion_matrix():
 def test_report_generation():
     # Specify labled and unlabled report
     pass
+
+@app.function(
+    image=download_image,
+    timeout=60 * 60,
+    volumes={
+        results_dir: results,
+        ollama_dir: model_cache
+        },
+    )
+def root_function():
+    assert find_llama_cli() != None
+    llm_test = define_test()
+    check_compute_sampling(llm_test=llm_test)
+    check_write_block(llm_test=llm_test)
