@@ -452,7 +452,7 @@ def run_all_evaluations():
     # from key import hf_token
     from llm_test import LLM_TEST
 
-    df, prompt_config, strategy_suffix, prompt_type = prep_data(prompt_type="ccot_nl", sample_strategy="balanced", sample_size=10)#specific_indices=[71, 72, prep_data(prompt_type="ccot_nl", sample_strategy="random", sample_size=200)#specific_indices=[71, 72, 73, 773, 74, 75])
+    df, prompt_config, strategy_suffix, prompt_type = prep_data(prompt_type="ccot_nl", sample_strategy="full", sample_size=10)#specific_indices=[71, 72, prep_data(prompt_type="ccot_nl", sample_strategy="random", sample_size=200)#specific_indices=[71, 72, 73, 773, 74, 75])
 
     def extract_predicted_label(result):
         json
@@ -485,14 +485,16 @@ def run_all_evaluations():
         # howmany rows are being feed into the llm at once
         row_count=1,
         # How many element should be in a batch
-        batch_size=5,
+        batch_size=20,
         # In how many threads/container the program should run
-        multithreads=2,
+        multithreads=10,
         dir_path="/root/results",
         timeout=4*60
     )
     # Money before run 4981.54$ -> 4980.84 in reality. Program thought 0.36
     # Second was 4978.73
+
+    # Big run 4972.49$ 
     # test execution
     run_pipeline(llm_test)
 
