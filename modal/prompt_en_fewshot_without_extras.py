@@ -1,5 +1,3 @@
-# https://docs.google.com/document/d/1IcHzTx7dSVw-qFRPrcbjUpatWHQAXGY9fnlUh5phGUk/edit?tab=t.0
-
 prompt = """
 
 VERY IMPORTANT - OUTPUT RULES:

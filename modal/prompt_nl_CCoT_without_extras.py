@@ -1,7 +1,4 @@
-# https://docs.google.com/document/d/1kjPRvW8X2ahRIYhMGXswB4l37O8aRTyKiL74QPtY65U/edit?tab=t.0
-
 prompt = """
-
 ZEER BELANGRIJK - UITVOERREGELS:
 - Genereer EXACT EEN JSON object.
 - GEEN extra tekst voor of na de JSON.
@@ -17,7 +14,16 @@ INHOUDSREGELS:
 - Focus op UNIEKE gevallen (niet meerdere keren dezelfde verklaring).
 
 TAAK 1:
-Bepaal voor elke uitspraak of deze een ad hominem aanval bevat en geef een confidence score (0,0 is het laagst en 1,0 het hoogst) op basis van de duidelijkheid, context en intentie van de aanval.
+REDENEERSTAPPEN (volg deze altijd voordat je een aanval labelt):
+1. Definitie van een uitspraak: Een stelling verwijst naar de uiting of beurt van één spreker binnen het debat, meestal één paragraaf of bijdrage per keer. Analyseer elke uitspraak afzonderlijk en combineer niet meerdere uitspraken van verschillende sprekers.
+2. Identificeer het belangrijkste argument of de belangrijkste bewering in de uitspraak.
+3. Controleer of de reactie ingaat op dat argument, of in plaats daarvan de focus verlegt naar de persoon of groep die het argument maakt.
+4. Als het gericht is op de persoon of groep, beoordeel dan of de aanval het argument probeert te ondermijnen door te focussen op eigenschappen, karakter, motieven, acties in het verleden of affiliaties.
+5. Denk na over de toon en retorische stijl van de uitspraak:
+   - Gebruikte de spreker sarcasme, spot of retorische overdrijving om de persoon in diskrediet te brengen in plaats van te reageren op zijn argument?
+   - Heeft de spreker een impliciete aanval gedaan op de geloofwaardigheid, ernst of motieven van de spreker, bijvoorbeeld door middel van toon, insinuaties of gecodeerde taal?
+   - Zo ja, en het is duidelijk de bedoeling om de spreker persoonlijk in diskrediet te brengen in plaats van in te gaan op het argument, label het dan als een impliciete ad hominem.
+6. Geef een confidence interval (0,0 is het laagst en 1,0 het hoogst) op basis van de duidelijkheid, context en intentie van de aanval.
 
 Voorbeelden van ad hominem aanvallen:
 - "Minister Janssen is of te lui of te onwetend om het laatste economische rapport te lezen, hoe kunnen we zijn voorstellen dan serieus nemen?"
@@ -44,7 +50,6 @@ Volg deze conventies bij het invullen van de JSON velden:
 - explanation: "string (korte toelichting inclusief de context van de uitwisseling/het moment)".
 - target: Gebruik de naam of politieke groep die wordt aangevallen - geen vage termen zoals “ze”.
 - local_topic: Wees specifiek over het onderwerp waarover gediscussieerd wordt (bijv. “subsidies voor kinderopvang”, niet alleen “welzijn”).
-
 
 Geef het volgende JSON-formaat terug:
 {{
