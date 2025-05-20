@@ -88,81 +88,31 @@ download_image = (
     image=download_image, volumes={ollama_dir: model_cache}, timeout=60 * 10,
 )
 def download_model(llm_test):
-    global gguf_path
-    from huggingface_hub import snapshot_download
-    import shutil
-    # from llm_test import LLM_TEST
+    from huggingface_hub import hf_hub_download
 
-        
-    # from llm_test import LLM_TEST
-    # from llama_cpp import Llama
-    # llm = Llama.from_pretrained(
-    # repo_id="Mungert/gemma-3-27b-it-GGUF",
-    # filename="gemma-3-27b-it-q4_0.gguf",
-    # cache_dir=ollama_dir  # <-- your custom location
-    # )
-    return ollama_dir + "/" + "gemma-3-27b-it-q4_0.gguf"
+    # Inputs
+    repo_id = llm_test.model
+    quantization = llm_test.quant
 
-    print("📦 Downloading model from:", repo_id)
-    model_path = snapshot_download(llm_test.model, local_dir=cache_dir, token=llm_test.hf_token)
-    gguf_files = glob.glob(os.path.join(model_path, "*.gguf"))
-    model_cache.commit()
-    print("🦙 model loaded")
-
-    if gguf_files:
-        preferred = [f for f in gguf_files if llm_test.quant.lower() or llm_test.quant in f]
-        if not preferred:
-            # Check if capital letters is the issue:
-            preferred = [f for f in gguf_files if llm_test.quant or llm_test.quant in f]
-            raise FileNotFoundError(f"No GGUF file found for quant '{llm_test.quant}'")
-
-        return preferred[0]
-    else:
-        raise FileNotFoundError("No GGUF file found in the downloaded model directory.")
-
-@app.function(
-    image=download_image,
-    timeout=60 * 60,
-    volumes={
-        results_dir: results,
-        ollama_dir: model_cache
-        },
+    # Step 1: Find matching GGUF file
+    files = list_repo_files(repo_id)
+    gguf_file = next(
+        (f for f in files if f.endswith(".gguf") and quantization in f),
+        None
     )
-def download_ollama_model(model: str):
-    #https://modal.com/blog/how_to_run_ollama_article
-    import os
-    import subprocess
-    import time
 
-    subprocess.Popen(["ollama", "serve"], env={**os.environ, "OLLAMA_MODELS": ollama_dir})
+    if gguf_file is None:
+        raise ValueError(f"No GGUF file with quantization '{quantization}' found in {repo_id}")
 
-    # Optional: wait a moment for server to boot
-    #import time
-    #time.sleep(2)
-    print("download model: ", model)
-
-    import ollama
-    ollama.pull(model)
-    
-
-# -------------------- RUN LLAMA.CPP -------------------- #
-
-def llama_cpp_inference(llm, gguf_path: str, prompt: str, n_predict: int = -1,DEBUG=False):
-    # set layers to "off-load to", aka run on, GPU
-    if GPU_CONFIG is not None:
-        n_gpu_layers = 9999  # all
-    else:
-        n_gpu_layers = 0
-    response = llm.create_chat_completion(
-        messages=[
-            {"role": "user", "content": str(prompt)},
-        ],
-        response_format={
-        "type": "json_object"
-        },
-        #temperature=0,
+    # Step 2: Download the model to your custom path
+    model_path = hf_hub_download(
+        repo_id=repo_id,
+        filename=gguf_file,
+        cache_dir=ollama_dir
     )
-    return response["choices"][0]["message"]["content"]
+
+    print("Model downloaded to:", model_path)
+    return model_path
 
 @app.function(
     image=download_image,
@@ -172,22 +122,13 @@ def llama_cpp_inference(llm, gguf_path: str, prompt: str, n_predict: int = -1,DE
         ollama_dir: model_cache
         },
     gpu=GPU_CONFIG)
-def llama_cpp_inference_batch(llm, list_msg, timeout, verbose=True, temperature=0):
+def llama_cpp_inference_batch(model_path,llm, list_msg, timeout, verbose=True, temperature=0):
     from woke_llama import Woke_LLama
-    import os
 
-    # Original long path
-    long_model_path = f'{ollama_dir}/models--Mungert--gemma-3-27b-it-GGUF/blobs/f3b2259712093260f0f5336d879c8270f23429d1693f6ae5b756086d2c695668'
-    # Shorter, safe path for llama.cpp
-    short_model_path = '/app/model.gguf'
-
-    # Create symlink if it doesn't already exist
-    if not os.path.exists(short_model_path):
-        os.symlink(long_model_path, short_model_path)
 
     woke_llama = Woke_LLama(
         llama_cli_path="/app/llama-cli",
-        gguf_path=short_model_path
+        gguf_path=model_path
     )
 
     responses = []
@@ -199,92 +140,7 @@ def llama_cpp_inference_batch(llm, list_msg, timeout, verbose=True, temperature=
         responses.append(result)
 
     return responses
-@app.function(
-    image=download_image,
-    timeout=60 * 60,
-    volumes={
-        results_dir: results,
-        ollama_dir: model_cache
-        },
-    gpu=GPU_CONFIG)
-def ollama_inference(model, list_msg, timeout, temperature=0):
-    import ollama
-    import subprocess
-    import os
-    import time
-    import threading
-    from concurrent.futures import ThreadPoolExecutor, TimeoutError
 
-    # Initialise ollama
-    subprocess.Popen(["ollama", "serve"], env={**os.environ, "OLLAMA_MODELS": ollama_dir})
-    time.sleep(0.5)
-    monitor = threading.Thread(target=monitor_power, daemon=True)
-    monitor.start()
-
-    def call_ollama(message):
-        return ollama.chat(model=model, messages=message, options={"temperature": temperature})
-
-    responses = []
-
-    with ThreadPoolExecutor(max_workers=1) as executor:
-        for messages in list_msg:
-            start_time = time.time()
-            power_samples.clear()
-
-            future = executor.submit(call_ollama, messages)
-            try:
-                response = future.result(timeout=timeout)
-                is_timeout = False
-                raw = response
-            except TimeoutError:
-                is_timeout = True
-                raw = None
-            except Exception as e:
-                raw = e
-                is_timeout = False
-
-            duration = time.time() - start_time
-            avg_power = sum(power_samples) / len(power_samples) if power_samples else 0
-            energy = avg_power * duration
-
-            responses.append({
-                "index": messages[-1]["index"],
-                "raw": raw,
-                "duration": duration,
-                "energy": energy,
-                "power-samples": power_samples.copy(),
-                "is_timeout": is_timeout
-            })
-
-    return responses
-# -------------------- Helper -------------------- #
-
-
-def get_gpu_power():
-    """
-        Return power usage of cuda driver
-    """
-    import subprocess
-    result = subprocess.run(
-        ["nvidia-smi", "--query-gpu=power.draw", "--format=csv,noheader,nounits"],
-        capture_output=True,
-        text=True
-    )
-    try:
-        return float(result.stdout.strip())
-    except:
-        return 0.0
-
-power_samples = []
-def monitor_power(interval=0.5):
-    """
-        Monitor average power consumtion of cuda driver
-    """
-    import time
-    while True:
-        power = get_gpu_power()
-        power_samples.append(power)
-        time.sleep(interval)
 # -------------------- EVALUATE -------------------- #
 def run_pipeline(llm_test, DEBUG=False):
     import pandas as pd
@@ -297,18 +153,11 @@ def run_pipeline(llm_test, DEBUG=False):
     from concurrent.futures import ThreadPoolExecutor, as_completed
 
     print("🚀 Starting pipeline...")
-    # TODO find different way in monitoring power
     start_time = time.time()
 
     # Initialise llm
-    if llm_test.ollama:
-        # starts the ollama 
-        download_ollama_model.remote(llm_test.model)
-        #process = subprocess.Popen(["ollama", "serve"])
-    else:
-        #gguf_path = download_model.remote(llm_test)
-        #llm = Llama(model_path=gguf_path, n_gpu_layers=-1, n_ctx=4096, verbose=DEBUG)
-        pass
+    gguf_path = download_model.remote(llm_test)
+        
 
     def process_batch():
         while True:
@@ -341,10 +190,9 @@ def run_pipeline(llm_test, DEBUG=False):
                 ])
 
                 query.append(messages)
-            if llm_test.ollama:
-                results = ollama_inference.remote(llm_test.model, query, llm_test.timeout)
-            else:
-                results = llama_cpp_inference_batch.remote(llm_test.model, query, llm_test.timeout, verbose=False)
+
+            
+            results = llama_cpp_inference_batch.remote(llm_test.model, query, llm_test.timeout, verbose=False)
             llm_test.write_result(results)
             llm_test.compute_forecast_report(start_time, GPU_INFO, GPU_CONFIG)  
     
@@ -360,26 +208,6 @@ def run_pipeline(llm_test, DEBUG=False):
             
     llm_test.compute_results()
     llm_test.generate_tk_report(start_time, GPU_INFO, GPU_CONFIG )#power_samples)
-    return llm_test
-
-def compute_results(llm_test):
-    import pandas as pd
-    from sklearn.metrics import accuracy_score
-
-    df = llm_test.get_df()
-
-    df["predicted"] = df["result"].apply(llm_test.parse_function)
-
-    len_unclassified = len(df[df["predicted"]== "Unknown"])
-    df = df[df["predicted"] != "Unknown"]
-
-    # Now make types consistent
-    df["truth_label"] = df["Label"] != "No Ad Hominem"
-    df["predicted"] = df["predicted"] != "No Ad Hominem"
- 
-    accuracy = accuracy_score(df["truth_label"], df["predicted"])
-    print(f"🎯 Accuracy: {accuracy:.2%}")
-    llm_test.save_results(output=df, accuracy=accuracy, len_unclassified=len_unclassified)
     return llm_test
 
 def prep_data(prompt_type, sample_strategy="full", specific_indices=None, sample_size=None):
@@ -475,8 +303,7 @@ def run_all_evaluations():
         text_key="speech_text",
         truth_lable_name="final_label",
         parse_function=extract_predicted_label, 
-        model="Mungert/gemma-3-27b-it-GGUF",#"mistral-small3.1", 
-        ollama=False,
+        model="unsloth/gemma-3-27b-it-GGUF",
         hf_token="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",
         quant="Q4_K_M",
         dataset_nick_name=f"tweede_kamer_debate",
@@ -485,9 +312,9 @@ def run_all_evaluations():
         # howmany rows are being feed into the llm at once
         row_count=1,
         # How many element should be in a batch
-        batch_size=20,
+        batch_size=10,
         # In how many threads/container the program should run
-        multithreads=10,
+        multithreads=1,
         dir_path="/root/results",
         timeout=4*60
     )
@@ -495,6 +322,7 @@ def run_all_evaluations():
     # Second was 4978.73
 
     # Big run 4972.49$ 
+    # Big run 2 4951.36
     # test execution
     run_pipeline(llm_test)
 

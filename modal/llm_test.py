@@ -168,12 +168,12 @@ class LLM_TEST:
         avg_energy = self.df.loc[finished_mask, "energy"].mean() if finished_count > 0 else None
 
         # Forecasts
-        remaining_time = avg_duration * unfinished_count if avg_duration else None
+        remaining_time = (avg_duration/self.multithreads) * unfinished_count if avg_duration else None
         estimated_total_energy = avg_energy * total_rows if avg_energy else None
 
         # Cost calculation: duration * price/sec * threads
         price_per_sec = GPU_INFO[GPU_CONFIG]["price_per_sec"]
-        total_duration = self.df.loc[finished_mask, "duration"].sum()
+        total_duration = avg_duration * len(self.df)
         estimated_cost = total_duration * price_per_sec if total_duration else None
         readable_time = datetime.fromtimestamp(start_time, tz=ZoneInfo(self.TIME_ZONE)).strftime("%Y-%m-%d %H:%M:%S")
         # Output
@@ -182,7 +182,7 @@ class LLM_TEST:
         print(f"⏱️ Running since: {readable_time}  Avg Duration: {avg_duration:.2f}s" if avg_duration else "⏱️ Avg Duration: N/A")
         print(f"⏳ Estimated Remaining Time: {remaining_time/60:.2f} min" if remaining_time else "⏳ Remaining Time: N/A")
         print(f"⚡ Estimated Total Energy: {estimated_total_energy:.2f} J" if estimated_total_energy else "⚡ Energy: N/A")
-        print(f"🤑 Estimated Cost: ${estimated_cost:.2f} 💰" if estimated_cost else "🤑 Cost: N/A")
+        print(f"💰 Estimated Cost: ${estimated_cost:.2f} " if estimated_cost else "🤑 Cost: N/A")
 
         return {
             "finished_percent": round(finished_percent, 2),
@@ -198,18 +198,14 @@ class LLM_TEST:
         assert isinstance(self.df, pd.DataFrame), "df must be a pandas DataFrame"
         assert isinstance(self.prompt, str) and self.prompt != "", "prompt must be a non-empty string"
         assert isinstance(self.model, str) and self.model != "", "model must be a non-empty string"
-        assert isinstance(self.ollama, bool), "ollama must be a boolean"
         assert isinstance(self.dataset_language, str), "dataset_language must be a string"
         assert isinstance(self.prompt_language, str), "prompt_language must be a string"
         assert isinstance(self.dataset_nick_name, str), "dataset_nick_name must be a string"
         assert isinstance(self.prompt_nick_name, str), "prompt_nick_name must be a string"
         assert callable(self.parse_function), "parse_function must be a callable (function)"
-
-        # Conditional check: if not using ollama, hf_token must be present
-        if not self.ollama:
-            assert isinstance(self.hf_token, str) and self.hf_token != "", \
-                "hf_token must be a non-empty string if ollama is False"
-            assert isinstance(self.quant, str) and self.quant != "", "quant must be a non-empty string"
+        assert isinstance(self.hf_token, str) and self.hf_token != "", \
+            "hf_token must be a non-empty string"
+        assert isinstance(self.quant, str) and self.quant != "", "quant must be a non-empty string"
 
         print("All type checks passed.")
     def get_df(self):
@@ -484,37 +480,37 @@ class LLM_TEST:
         report.add_general_info(info, [confusion_matrix_path])
 
         # Process each speech for the report with special handling for timeouts
-        # for _, speech in self.df.iterrows():
-        #     result_to_display = None
+        for _, speech in self.df.iterrows():
+            result_to_display = None
             
-        #     # Handle timeout cases
-        #     if speech.get('is_timeout', 0) == 1:
-        #         result_to_display = {
-        #             "status": "timeout",
-        #             "raw_result": {
-        #                 "timeout_error": "Inference timed out",
-        #                 "is_timeout": True
-        #             }
-        #         }
-        #     else:
-        #         # For non-timeout cases, try to clean the result
-        #         try:
-        #             result_to_display = self.clean_result(speech["result"]) if isinstance(speech["result"], str) else speech["result"]
-        #         except Exception:
-        #             result_to_display = {
-        #                 "status": "error",
-        #                 "raw_result": {
-        #                     "parsing_error": "Unable to parse JSON output",
-        #                     "raw_output": str(speech["result"])[:500] + "..." if len(str(speech["result"])) > 500 else str(speech["result"])
-        #                 }
-        #             }
+            # Handle timeout cases
+            if speech["is_timeout"]:
+                result_to_display = {
+                    "status": "timeout",
+                    "raw_result": {
+                        "timeout_error": "Inference timed out",
+                        "is_timeout": True
+                    }
+                }
+            else:
+                # For non-timeout cases, try to clean the result
+                try:
+                    result_to_display = self.clean_result(speech["result"]) if isinstance(speech["result"], str) else speech["result"]
+                except Exception:
+                    result_to_display = {
+                        "status": "error",
+                        "raw_result": {
+                            "parsing_error": "Unable to parse JSON output",
+                            "raw_output": str(speech["result"])[:500] + "..." if len(str(speech["result"])) > 500 else str(speech["result"])
+                        }
+                    }
             
-        #     report.add_test({
-        #         "Speech": speech["speech_text"],
-        #         "Speaker": speech["speaker_name"],
-        #         "Party": speech["speaker_party"],
-        #         "Result": result_to_display
-        #     })
+            report.add_test({
+                "Speech": speech["speech_text"],
+                "Speaker": speech["speaker_name"],
+                "Party": speech["speaker_party"],
+                "Result": result_to_display
+            })
         path = f"report_tk_debate_{self.prompt_language}_{self.dataset_language}_{self.model}_{now}".replace("/","_")
         print("dir_path: ", self.dir_path)
         print("path: ", path)

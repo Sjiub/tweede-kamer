@@ -1,0 +1,227 @@
+<?xml version='1.0' encoding='utf-8'?>
+<gexf xmlns="http://www.gexf.net/1.2draft" xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance" xsi:schemaLocation="http://www.gexf.net/1.2draft http://www.gexf.net/1.2draft/gexf.xsd" version="1.2">
+  <meta lastmodifieddate="2025-05-19">
+    <creator>NetworkX 3.4.2</creator>
+  </meta>
+  <graph defaultedgetype="undirected" mode="static" name="">
+    <nodes>
+      <node id="Ellemeet" label="Ellemeet" />
+      <node id="Schouw" label="Schouw" />
+      <node id="Dijksma" label="Dijksma" />
+      <node id="Dijkgraaf" label="Dijkgraaf" />
+      <node id="Heerma" label="Heerma" />
+      <node id="Oskam" label="Oskam" />
+      <node id="Dijkhoff" label="Dijkhoff" />
+      <node id="Helder" label="Helder" />
+      <node id="Karabulut" label="Karabulut" />
+      <node id="Koolmees" label="Koolmees" />
+      <node id="Dijsselbloem" label="Dijsselbloem" />
+      <node id="Schippers" label="Schippers" />
+      <node id="Segers" label="Segers" />
+      <node id="Klever" label="Klever" />
+      <node id="Hoogland" label="Hoogland" />
+      <node id="Ronnes" label="Ronnes" />
+      <node id="Bashir" label="Bashir" />
+      <node id="Verhoeven" label="Verhoeven" />
+      <node id="Omtzigt" label="Omtzigt" />
+      <node id="Agema" label="Agema" />
+      <node id="Smaling" label="Smaling" />
+      <node id="Mulder" label="Mulder" />
+      <node id="Vermue" label="Vermue" />
+      <node id="Westerveld" label="Westerveld" />
+      <node id="Wassenberg" label="Wassenberg" />
+      <node id="Diertens" label="Diertens" />
+      <node id="Dik-Faber" label="Dik-Faber" />
+      <node id="Jetten" label="Jetten" />
+      <node id="Geurts" label="Geurts" />
+      <node id="Markuszower" label="Markuszower" />
+      <node id="Moorlag" label="Moorlag" />
+      <node id="Kerstens" label="Kerstens" />
+      <node id="Rog" label="Rog" />
+      <node id="Krol" label="Krol" />
+      <node id="Harbers" label="Harbers" />
+      <node id="Klaver" label="Klaver" />
+      <node id="Schonis" label="Schonis" />
+      <node id="Bisschop" label="Bisschop" />
+      <node id="Paternotte" label="Paternotte" />
+      <node id="Stoffer" label="Stoffer" />
+      <node id="Laçin" label="Laçin" />
+      <node id="Baudet" label="Baudet" />
+      <node id="Bromet" label="Bromet" />
+      <node id="Sjoerdsma" label="Sjoerdsma" />
+      <node id="Piri" label="Piri" />
+      <node id="Aartsen" label="Aartsen" />
+      <node id="Eerdmans" label="Eerdmans" />
+      <node id="Azarkan" label="Azarkan" />
+      <node id="Bikker" label="Bikker" />
+      <node id="Kuiken" label="Kuiken" />
+      <node id="Balkenende" label="Balkenende" />
+      <node id="Erkens" label="Erkens" />
+      <node id="Belhaj" label="Belhaj" />
+      <node id="Slob" label="Slob" />
+      <node id="Eppink" label="Eppink" />
+      <node id="Boswijk" label="Boswijk" />
+      <node id="Vestering" label="Vestering" />
+      <node id="Bontenbal" label="Bontenbal" />
+      <node id="Smals" label="Smals" />
+      <node id="Bushoff" label="Bushoff" />
+      <node id="Amhaouch" label="Amhaouch" />
+      <node id="Sneller" label="Sneller" />
+      <node id="Ceder" label="Ceder" />
+      <node id="Vermeer" label="Vermeer" />
+      <node id="Six Dijkstra" label="Six Dijkstra" />
+      <node id="Ellian" label="Ellian" />
+      <node id="Dassen" label="Dassen" />
+      <node id="Podt" label="Podt" />
+      <node id="Kröger" label="Kröger" />
+      <node id="Krul" label="Krul" />
+      <node id="Tielen" label="Tielen" />
+      <node id="True" label="True" />
+      <node id="False" label="False" />
+      <node id="Van Rijn" label="Van Rijn" />
+      <node id="Schouten" label="Schouten" />
+      <node id="Anne Mulder" label="Anne Mulder" />
+      <node id="Van Raak" label="Van Raak" />
+      <node id="Opstelten" label="Opstelten" />
+      <node id="Neppérus" label="Neppérus" />
+      <node id="Oosenbrug" label="Oosenbrug" />
+      <node id="Van Haersma Buma" label="Van Haersma Buma" />
+      <node id="Graus" label="Graus" />
+      <node id="Blok" label="Blok" />
+      <node id="Servaes" label="Servaes" />
+      <node id="Pia Dijkstra" label="Pia Dijkstra" />
+      <node id="Van der Steur" label="Van der Steur" />
+      <node id="Kamp" label="Kamp" />
+      <node id="Bussemaker" label="Bussemaker" />
+      <node id="Van den Berg" label="Van den Berg" />
+      <node id="Agnes Mulder" label="Agnes Mulder" />
+      <node id="Bergkamp" label="Bergkamp" />
+      <node id="Rudmer Heerema" label="Rudmer Heerema" />
+      <node id="Bruins Slot" label="Bruins Slot" />
+      <node id="Drost" label="Drost" />
+      <node id="Van Aalst" label="Van Aalst" />
+      <node id="Van Nieuwenhuizen-Wijbenga" label="Van Nieuwenhuizen-Wijbenga" />
+      <node id="Kuzu" label="Kuzu" />
+      <node id="Rutte" label="Rutte" />
+      <node id="De Groot" label="De Groot" />
+      <node id="Hoekstra" label="Hoekstra" />
+      <node id="Bosman" label="Bosman" />
+      <node id="Van Toorenburg" label="Van Toorenburg" />
+      <node id="Von Martels" label="Von Martels" />
+      <node id="Jasper van Dijk" label="Jasper van Dijk" />
+      <node id="Boucke" label="Boucke" />
+      <node id="Wiersma" label="Wiersma" />
+      <node id="Van der Plas" label="Van der Plas" />
+      <node id="Grinwis" label="Grinwis" />
+      <node id="Van Kent" label="Van Kent" />
+      <node id="Hammelburg" label="Hammelburg" />
+      <node id="Yeşilgöz-Zegerius" label="Yeşilgöz-Zegerius" />
+      <node id="Michon-Derkzen" label="Michon-Derkzen" />
+      <node id="Romke de Jong" label="Romke de Jong" />
+      <node id="Weerwind" label="Weerwind" />
+      <node id="Bosma" label="Bosma" />
+      <node id="Kamminga" label="Kamminga" />
+      <node id="Adriaansens" label="Adriaansens" />
+      <node id="Maatoug" label="Maatoug" />
+      <node id="Van der Lee" label="Van der Lee" />
+    </nodes>
+    <edges>
+      <edge source="Ellemeet" target="Van Rijn" id="0" />
+      <edge source="Schouw" target="Dijksma" id="1" />
+      <edge source="Dijkgraaf" target="Schouten" id="2" />
+      <edge source="Heerma" target="Anne Mulder" id="3" />
+      <edge source="Oskam" target="Van Raak" id="4" />
+      <edge source="Dijkhoff" target="Opstelten" id="5" />
+      <edge source="Dijkhoff" target="Klaver" id="6" />
+      <edge source="Helder" target="Opstelten" id="7" />
+      <edge source="Helder" target="Bushoff" id="8" />
+      <edge source="Karabulut" target="Verhoeven" id="9" />
+      <edge source="Karabulut" target="Kerstens" id="10" />
+      <edge source="Karabulut" target="Bruins Slot" id="11" />
+      <edge source="Koolmees" target="Neppérus" id="12" />
+      <edge source="Koolmees" target="Blok" id="13" />
+      <edge source="Koolmees" target="Dijsselbloem" id="14" />
+      <edge source="Koolmees" target="Segers" id="15" />
+      <edge source="Dijsselbloem" target="Oosenbrug" id="16" />
+      <edge source="Dijsselbloem" target="Ronnes" id="17" />
+      <edge source="Dijsselbloem" target="Vermue" id="18" />
+      <edge source="Schippers" target="Van Haersma Buma" id="19" />
+      <edge source="Segers" target="Van Haersma Buma" id="20" />
+      <edge source="Segers" target="Segers" id="21" />
+      <edge source="Klever" target="Graus" id="22" />
+      <edge source="Hoogland" target="Bisschop" id="23" />
+      <edge source="Ronnes" target="Blok" id="24" />
+      <edge source="Ronnes" target="Ronnes" id="25" />
+      <edge source="Bashir" target="Blok" id="26" />
+      <edge source="Verhoeven" target="Servaes" id="27" />
+      <edge source="Omtzigt" target="Servaes" id="28" />
+      <edge source="Omtzigt" target="Van der Steur" id="29" />
+      <edge source="Omtzigt" target="Smals" id="30" />
+      <edge source="Agema" target="Pia Dijkstra" id="31" />
+      <edge source="Agema" target="Bergkamp" id="32" />
+      <edge source="Smaling" target="Kamp" id="33" />
+      <edge source="Mulder" target="Kamp" id="34" />
+      <edge source="Westerveld" target="Bussemaker" id="35" />
+      <edge source="Westerveld" target="Bisschop" id="36" />
+      <edge source="Wassenberg" target="Jetten" id="37" />
+      <edge source="Wassenberg" target="Wassenberg" id="38" />
+      <edge source="Wassenberg" target="Von Martels" id="39" />
+      <edge source="Wassenberg" target="Van der Plas" id="40" />
+      <edge source="Diertens" target="Van den Berg" id="41" />
+      <edge source="Diertens" target="Drost" id="42" />
+      <edge source="Diertens" target="Bosman" id="43" />
+      <edge source="Dik-Faber" target="Agnes Mulder" id="44" />
+      <edge source="Jetten" target="Agnes Mulder" id="45" />
+      <edge source="Jetten" target="Vermeer" id="46" />
+      <edge source="Geurts" target="Geurts" id="47" />
+      <edge source="Markuszower" target="Markuszower" id="48" />
+      <edge source="Moorlag" target="Schouten" id="49" />
+      <edge source="Moorlag" target="De Groot" id="50" />
+      <edge source="Kerstens" target="Kerstens" id="51" />
+      <edge source="Rog" target="Rudmer Heerema" id="52" />
+      <edge source="Krol" target="Bruins Slot" id="53" />
+      <edge source="Harbers" target="Baudet" id="54" />
+      <edge source="Harbers" target="Klaver" id="55" />
+      <edge source="Harbers" target="Bromet" id="56" />
+      <edge source="Schonis" target="Van Aalst" id="57" />
+      <edge source="Bisschop" target="Piri" id="58" />
+      <edge source="Paternotte" target="Van Nieuwenhuizen-Wijbenga" id="59" />
+      <edge source="Paternotte" target="Van den Berg" id="60" />
+      <edge source="Paternotte" target="Paternotte" id="61" />
+      <edge source="Stoffer" target="Van Nieuwenhuizen-Wijbenga" id="62" />
+      <edge source="Stoffer" target="Belhaj" id="63" />
+      <edge source="Laçin" target="Van Nieuwenhuizen-Wijbenga" id="64" />
+      <edge source="Baudet" target="Kuzu" id="65" />
+      <edge source="Sjoerdsma" target="Rutte" id="66" />
+      <edge source="Sjoerdsma" target="Sjoerdsma" id="67" />
+      <edge source="Piri" target="Rutte" id="68" />
+      <edge source="Aartsen" target="Hoekstra" id="69" />
+      <edge source="Aartsen" target="Romke de Jong" id="70" />
+      <edge source="Eerdmans" target="Hoekstra" id="71" />
+      <edge source="Eerdmans" target="Eerdmans" id="72" />
+      <edge source="Azarkan" target="Van Toorenburg" id="73" />
+      <edge source="Bikker" target="Bikker" id="74" />
+      <edge source="Bikker" target="Kuiken" id="75" />
+      <edge source="Balkenende" target="Jasper van Dijk" id="76" />
+      <edge source="Erkens" target="Boucke" id="77" />
+      <edge source="Slob" target="Wiersma" id="78" />
+      <edge source="Eppink" target="Eppink" id="79" />
+      <edge source="Boswijk" target="Grinwis" id="80" />
+      <edge source="Vestering" target="Vestering" id="81" />
+      <edge source="Bontenbal" target="Kröger" id="82" />
+      <edge source="Smals" target="Van Kent" id="83" />
+      <edge source="Amhaouch" target="Hammelburg" id="84" />
+      <edge source="Sneller" target="Yeşilgöz-Zegerius" id="85" />
+      <edge source="Sneller" target="Maatoug" id="86" />
+      <edge source="Ceder" target="Bergkamp" id="87" />
+      <edge source="Vermeer" target="Maatoug" id="88" />
+      <edge source="Six Dijkstra" target="Michon-Derkzen" id="89" />
+      <edge source="Ellian" target="Weerwind" id="90" />
+      <edge source="Dassen" target="Bosma" id="91" />
+      <edge source="Podt" target="Kamminga" id="92" />
+      <edge source="Kröger" target="Adriaansens" id="93" />
+      <edge source="Krul" target="Van der Lee" id="94" />
+      <edge source="Tielen" target="Van der Lee" id="95" />
+    </edges>
+  </graph>
+</gexf>

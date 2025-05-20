@@ -1,0 +1,559 @@
+<?xml version='1.0' encoding='utf-8'?>
+<gexf xmlns="http://www.gexf.net/1.2draft" xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance" xsi:schemaLocation="http://www.gexf.net/1.2draft http://www.gexf.net/1.2draft/gexf.xsd" version="1.2">
+  <meta lastmodifieddate="2025-05-19">
+    <creator>NetworkX 3.4.2</creator>
+  </meta>
+  <graph defaultedgetype="directed" mode="static" name="">
+    <attributes mode="static" class="edge">
+      <attribute id="0" title="ad_hominem" type="boolean" />
+    </attributes>
+    <nodes>
+      <node id="False" label="False" />
+      <node id="Hoogland" label="Hoogland" />
+      <node id="Smaling" label="Smaling" />
+      <node id="Westerveld" label="Westerveld" />
+      <node id="Diertens" label="Diertens" />
+      <node id="Verhoeven" label="Verhoeven" />
+      <node id="Schonis" label="Schonis" />
+      <node id="Segers" label="Segers" />
+      <node id="Bushoff" label="Bushoff" />
+      <node id="Paternotte" label="Paternotte" />
+      <node id="Amhaouch" label="Amhaouch" />
+      <node id="Agema" label="Agema" />
+      <node id="Vestering" label="Vestering" />
+      <node id="Koolmees" label="Koolmees" />
+      <node id="True" label="True" />
+      <node id="Eppink" label="Eppink" />
+      <node id="Six Dijkstra" label="Six Dijkstra" />
+      <node id="Kerstens" label="Kerstens" />
+      <node id="Boswijk" label="Boswijk" />
+      <node id="Podt" label="Podt" />
+      <node id="Sneller" label="Sneller" />
+      <node id="Aartsen" label="Aartsen" />
+      <node id="Ceder" label="Ceder" />
+      <node id="Rog" label="Rog" />
+      <node id="Klaver" label="Klaver" />
+      <node id="Dijksma" label="Dijksma" />
+      <node id="Tielen" label="Tielen" />
+      <node id="Bisschop" label="Bisschop" />
+      <node id="Mulder" label="Mulder" />
+      <node id="Eerdmans" label="Eerdmans" />
+      <node id="Azarkan" label="Azarkan" />
+      <node id="Schouw" label="Schouw" />
+      <node id="Harbers" label="Harbers" />
+      <node id="Slob" label="Slob" />
+      <node id="Wassenberg" label="Wassenberg" />
+      <node id="Moorlag" label="Moorlag" />
+      <node id="Dijkhoff" label="Dijkhoff" />
+      <node id="Oskam" label="Oskam" />
+      <node id="Schippers" label="Schippers" />
+      <node id="Laçin" label="Laçin" />
+      <node id="Kuiken" label="Kuiken" />
+      <node id="Karabulut" label="Karabulut" />
+      <node id="Markuszower" label="Markuszower" />
+      <node id="Bontenbal" label="Bontenbal" />
+      <node id="Heerma" label="Heerma" />
+      <node id="Krol" label="Krol" />
+      <node id="Dik-Faber" label="Dik-Faber" />
+      <node id="Stoffer" label="Stoffer" />
+      <node id="Dijsselbloem" label="Dijsselbloem" />
+      <node id="Sjoerdsma" label="Sjoerdsma" />
+      <node id="Ronnes" label="Ronnes" />
+      <node id="Piri" label="Piri" />
+      <node id="Bikker" label="Bikker" />
+      <node id="Klever" label="Klever" />
+      <node id="Smals" label="Smals" />
+      <node id="Kröger" label="Kröger" />
+      <node id="Krul" label="Krul" />
+      <node id="Omtzigt" label="Omtzigt" />
+      <node id="Bashir" label="Bashir" />
+      <node id="Baudet" label="Baudet" />
+      <node id="Erkens" label="Erkens" />
+      <node id="Helder" label="Helder" />
+      <node id="Vermeer" label="Vermeer" />
+      <node id="Belhaj" label="Belhaj" />
+      <node id="Dassen" label="Dassen" />
+      <node id="Vermue" label="Vermue" />
+      <node id="Jetten" label="Jetten" />
+      <node id="Dijkgraaf" label="Dijkgraaf" />
+      <node id="Balkenende" label="Balkenende" />
+      <node id="Bromet" label="Bromet" />
+      <node id="Ellemeet" label="Ellemeet" />
+      <node id="Ellian" label="Ellian" />
+      <node id="Geurts" label="Geurts" />
+      <node id="Van Rijn" label="Van Rijn" />
+      <node id="Schouten" label="Schouten" />
+      <node id="Anne Mulder" label="Anne Mulder" />
+      <node id="Van Raak" label="Van Raak" />
+      <node id="Opstelten" label="Opstelten" />
+      <node id="Neppérus" label="Neppérus" />
+      <node id="Oosenbrug" label="Oosenbrug" />
+      <node id="Van Haersma Buma" label="Van Haersma Buma" />
+      <node id="Graus" label="Graus" />
+      <node id="Blok" label="Blok" />
+      <node id="Servaes" label="Servaes" />
+      <node id="Pia Dijkstra" label="Pia Dijkstra" />
+      <node id="Van der Steur" label="Van der Steur" />
+      <node id="Kamp" label="Kamp" />
+      <node id="Bussemaker" label="Bussemaker" />
+      <node id="Van den Berg" label="Van den Berg" />
+      <node id="Agnes Mulder" label="Agnes Mulder" />
+      <node id="Bergkamp" label="Bergkamp" />
+      <node id="Rudmer Heerema" label="Rudmer Heerema" />
+      <node id="Bruins Slot" label="Bruins Slot" />
+      <node id="Drost" label="Drost" />
+      <node id="Van Aalst" label="Van Aalst" />
+      <node id="Van Nieuwenhuizen-Wijbenga" label="Van Nieuwenhuizen-Wijbenga" />
+      <node id="Kuzu" label="Kuzu" />
+      <node id="Rutte" label="Rutte" />
+      <node id="De Groot" label="De Groot" />
+      <node id="Hoekstra" label="Hoekstra" />
+      <node id="Bosman" label="Bosman" />
+      <node id="Van Toorenburg" label="Van Toorenburg" />
+      <node id="Von Martels" label="Von Martels" />
+      <node id="Jasper van Dijk" label="Jasper van Dijk" />
+      <node id="Boucke" label="Boucke" />
+      <node id="Wiersma" label="Wiersma" />
+      <node id="Van der Plas" label="Van der Plas" />
+      <node id="Grinwis" label="Grinwis" />
+      <node id="Van Kent" label="Van Kent" />
+      <node id="Hammelburg" label="Hammelburg" />
+      <node id="Yeşilgöz-Zegerius" label="Yeşilgöz-Zegerius" />
+      <node id="Michon-Derkzen" label="Michon-Derkzen" />
+      <node id="Romke de Jong" label="Romke de Jong" />
+      <node id="Weerwind" label="Weerwind" />
+      <node id="Bosma" label="Bosma" />
+      <node id="Kamminga" label="Kamminga" />
+      <node id="Adriaansens" label="Adriaansens" />
+      <node id="Maatoug" label="Maatoug" />
+      <node id="Van der Lee" label="Van der Lee" />
+    </nodes>
+    <edges>
+      <edge source="Westerveld" target="Bisschop" id="0">
+        <attvalues>
+          <attvalue for="0" value="false" />
+        </attvalues>
+      </edge>
+      <edge source="Verhoeven" target="Karabulut" id="1">
+        <attvalues>
+          <attvalue for="0" value="false" />
+        </attvalues>
+      </edge>
+      <edge source="Koolmees" target="Segers" id="2">
+        <attvalues>
+          <attvalue for="0" value="false" />
+        </attvalues>
+      </edge>
+      <edge source="Kerstens" target="Karabulut" id="3">
+        <attvalues>
+          <attvalue for="0" value="false" />
+        </attvalues>
+      </edge>
+      <edge source="Dijksma" target="Schouw" id="4">
+        <attvalues>
+          <attvalue for="0" value="false" />
+        </attvalues>
+      </edge>
+      <edge source="Bisschop" target="Hoogland" id="5">
+        <attvalues>
+          <attvalue for="0" value="false" />
+        </attvalues>
+      </edge>
+      <edge source="Schouw" target="Dijksma" id="6">
+        <attvalues>
+          <attvalue for="0" value="false" />
+        </attvalues>
+      </edge>
+      <edge source="Harbers" target="Klaver" id="7">
+        <attvalues>
+          <attvalue for="0" value="false" />
+        </attvalues>
+      </edge>
+      <edge source="Harbers" target="Bromet" id="8">
+        <attvalues>
+          <attvalue for="0" value="false" />
+        </attvalues>
+      </edge>
+      <edge source="Dijkhoff" target="Klaver" id="9">
+        <attvalues>
+          <attvalue for="0" value="false" />
+        </attvalues>
+      </edge>
+      <edge source="Stoffer" target="Belhaj" id="10">
+        <attvalues>
+          <attvalue for="0" value="false" />
+        </attvalues>
+      </edge>
+      <edge source="Dijsselbloem" target="Ronnes" id="11">
+        <attvalues>
+          <attvalue for="0" value="false" />
+        </attvalues>
+      </edge>
+      <edge source="Dijsselbloem" target="Vermue" id="12">
+        <attvalues>
+          <attvalue for="0" value="false" />
+        </attvalues>
+      </edge>
+      <edge source="Dijsselbloem" target="Koolmees" id="13">
+        <attvalues>
+          <attvalue for="0" value="false" />
+        </attvalues>
+      </edge>
+      <edge source="Piri" target="Bisschop" id="14">
+        <attvalues>
+          <attvalue for="0" value="false" />
+        </attvalues>
+      </edge>
+      <edge source="Bikker" target="Kuiken" id="15">
+        <attvalues>
+          <attvalue for="0" value="false" />
+        </attvalues>
+      </edge>
+      <edge source="Smals" target="Omtzigt" id="16">
+        <attvalues>
+          <attvalue for="0" value="false" />
+        </attvalues>
+      </edge>
+      <edge source="Kröger" target="Bontenbal" id="17">
+        <attvalues>
+          <attvalue for="0" value="false" />
+        </attvalues>
+      </edge>
+      <edge source="Baudet" target="Harbers" id="18">
+        <attvalues>
+          <attvalue for="0" value="false" />
+        </attvalues>
+      </edge>
+      <edge source="Helder" target="Bushoff" id="19">
+        <attvalues>
+          <attvalue for="0" value="false" />
+        </attvalues>
+      </edge>
+      <edge source="Jetten" target="Wassenberg" id="20">
+        <attvalues>
+          <attvalue for="0" value="false" />
+        </attvalues>
+      </edge>
+      <edge source="Jetten" target="Vermeer" id="21">
+        <attvalues>
+          <attvalue for="0" value="false" />
+        </attvalues>
+      </edge>
+      <edge source="Van Rijn" target="Ellemeet" id="22">
+        <attvalues>
+          <attvalue for="0" value="false" />
+        </attvalues>
+      </edge>
+      <edge source="Schouten" target="Dijkgraaf" id="23">
+        <attvalues>
+          <attvalue for="0" value="false" />
+        </attvalues>
+      </edge>
+      <edge source="Schouten" target="Moorlag" id="24">
+        <attvalues>
+          <attvalue for="0" value="false" />
+        </attvalues>
+      </edge>
+      <edge source="Anne Mulder" target="Heerma" id="25">
+        <attvalues>
+          <attvalue for="0" value="false" />
+        </attvalues>
+      </edge>
+      <edge source="Van Raak" target="Oskam" id="26">
+        <attvalues>
+          <attvalue for="0" value="false" />
+        </attvalues>
+      </edge>
+      <edge source="Opstelten" target="Dijkhoff" id="27">
+        <attvalues>
+          <attvalue for="0" value="false" />
+        </attvalues>
+      </edge>
+      <edge source="Opstelten" target="Helder" id="28">
+        <attvalues>
+          <attvalue for="0" value="false" />
+        </attvalues>
+      </edge>
+      <edge source="Neppérus" target="Koolmees" id="29">
+        <attvalues>
+          <attvalue for="0" value="false" />
+        </attvalues>
+      </edge>
+      <edge source="Oosenbrug" target="Dijsselbloem" id="30">
+        <attvalues>
+          <attvalue for="0" value="false" />
+        </attvalues>
+      </edge>
+      <edge source="Van Haersma Buma" target="Schippers" id="31">
+        <attvalues>
+          <attvalue for="0" value="true" />
+        </attvalues>
+      </edge>
+      <edge source="Van Haersma Buma" target="Segers" id="32">
+        <attvalues>
+          <attvalue for="0" value="true" />
+        </attvalues>
+      </edge>
+      <edge source="Graus" target="Klever" id="33">
+        <attvalues>
+          <attvalue for="0" value="false" />
+        </attvalues>
+      </edge>
+      <edge source="Blok" target="Ronnes" id="34">
+        <attvalues>
+          <attvalue for="0" value="false" />
+        </attvalues>
+      </edge>
+      <edge source="Blok" target="Bashir" id="35">
+        <attvalues>
+          <attvalue for="0" value="false" />
+        </attvalues>
+      </edge>
+      <edge source="Blok" target="Koolmees" id="36">
+        <attvalues>
+          <attvalue for="0" value="false" />
+        </attvalues>
+      </edge>
+      <edge source="Servaes" target="Verhoeven" id="37">
+        <attvalues>
+          <attvalue for="0" value="false" />
+        </attvalues>
+      </edge>
+      <edge source="Servaes" target="Omtzigt" id="38">
+        <attvalues>
+          <attvalue for="0" value="false" />
+        </attvalues>
+      </edge>
+      <edge source="Pia Dijkstra" target="Agema" id="39">
+        <attvalues>
+          <attvalue for="0" value="false" />
+        </attvalues>
+      </edge>
+      <edge source="Van der Steur" target="Omtzigt" id="40">
+        <attvalues>
+          <attvalue for="0" value="false" />
+        </attvalues>
+      </edge>
+      <edge source="Kamp" target="Smaling" id="41">
+        <attvalues>
+          <attvalue for="0" value="false" />
+        </attvalues>
+      </edge>
+      <edge source="Kamp" target="Mulder" id="42">
+        <attvalues>
+          <attvalue for="0" value="false" />
+        </attvalues>
+      </edge>
+      <edge source="Bussemaker" target="Westerveld" id="43">
+        <attvalues>
+          <attvalue for="0" value="false" />
+        </attvalues>
+      </edge>
+      <edge source="Van den Berg" target="Diertens" id="44">
+        <attvalues>
+          <attvalue for="0" value="false" />
+        </attvalues>
+      </edge>
+      <edge source="Van den Berg" target="Paternotte" id="45">
+        <attvalues>
+          <attvalue for="0" value="false" />
+        </attvalues>
+      </edge>
+      <edge source="Agnes Mulder" target="Dik-Faber" id="46">
+        <attvalues>
+          <attvalue for="0" value="false" />
+        </attvalues>
+      </edge>
+      <edge source="Agnes Mulder" target="Jetten" id="47">
+        <attvalues>
+          <attvalue for="0" value="false" />
+        </attvalues>
+      </edge>
+      <edge source="Bergkamp" target="Agema" id="48">
+        <attvalues>
+          <attvalue for="0" value="false" />
+        </attvalues>
+      </edge>
+      <edge source="Bergkamp" target="Ceder" id="49">
+        <attvalues>
+          <attvalue for="0" value="false" />
+        </attvalues>
+      </edge>
+      <edge source="Rudmer Heerema" target="Rog" id="50">
+        <attvalues>
+          <attvalue for="0" value="false" />
+        </attvalues>
+      </edge>
+      <edge source="Bruins Slot" target="Karabulut" id="51">
+        <attvalues>
+          <attvalue for="0" value="false" />
+        </attvalues>
+      </edge>
+      <edge source="Bruins Slot" target="Krol" id="52">
+        <attvalues>
+          <attvalue for="0" value="false" />
+        </attvalues>
+      </edge>
+      <edge source="Drost" target="Diertens" id="53">
+        <attvalues>
+          <attvalue for="0" value="false" />
+        </attvalues>
+      </edge>
+      <edge source="Van Aalst" target="Schonis" id="54">
+        <attvalues>
+          <attvalue for="0" value="false" />
+        </attvalues>
+      </edge>
+      <edge source="Van Nieuwenhuizen-Wijbenga" target="Paternotte" id="55">
+        <attvalues>
+          <attvalue for="0" value="false" />
+        </attvalues>
+      </edge>
+      <edge source="Van Nieuwenhuizen-Wijbenga" target="Stoffer" id="56">
+        <attvalues>
+          <attvalue for="0" value="false" />
+        </attvalues>
+      </edge>
+      <edge source="Van Nieuwenhuizen-Wijbenga" target="Laçin" id="57">
+        <attvalues>
+          <attvalue for="0" value="false" />
+        </attvalues>
+      </edge>
+      <edge source="Kuzu" target="Baudet" id="58">
+        <attvalues>
+          <attvalue for="0" value="true" />
+        </attvalues>
+      </edge>
+      <edge source="Rutte" target="Sjoerdsma" id="59">
+        <attvalues>
+          <attvalue for="0" value="false" />
+        </attvalues>
+      </edge>
+      <edge source="Rutte" target="Piri" id="60">
+        <attvalues>
+          <attvalue for="0" value="false" />
+        </attvalues>
+      </edge>
+      <edge source="De Groot" target="Moorlag" id="61">
+        <attvalues>
+          <attvalue for="0" value="false" />
+        </attvalues>
+      </edge>
+      <edge source="Hoekstra" target="Aartsen" id="62">
+        <attvalues>
+          <attvalue for="0" value="true" />
+        </attvalues>
+      </edge>
+      <edge source="Hoekstra" target="Eerdmans" id="63">
+        <attvalues>
+          <attvalue for="0" value="true" />
+        </attvalues>
+      </edge>
+      <edge source="Bosman" target="Diertens" id="64">
+        <attvalues>
+          <attvalue for="0" value="false" />
+        </attvalues>
+      </edge>
+      <edge source="Van Toorenburg" target="Azarkan" id="65">
+        <attvalues>
+          <attvalue for="0" value="true" />
+        </attvalues>
+      </edge>
+      <edge source="Von Martels" target="Wassenberg" id="66">
+        <attvalues>
+          <attvalue for="0" value="false" />
+        </attvalues>
+      </edge>
+      <edge source="Jasper van Dijk" target="Balkenende" id="67">
+        <attvalues>
+          <attvalue for="0" value="false" />
+        </attvalues>
+      </edge>
+      <edge source="Boucke" target="Erkens" id="68">
+        <attvalues>
+          <attvalue for="0" value="false" />
+        </attvalues>
+      </edge>
+      <edge source="Wiersma" target="Slob" id="69">
+        <attvalues>
+          <attvalue for="0" value="true" />
+        </attvalues>
+      </edge>
+      <edge source="Van der Plas" target="Wassenberg" id="70">
+        <attvalues>
+          <attvalue for="0" value="false" />
+        </attvalues>
+      </edge>
+      <edge source="Grinwis" target="Boswijk" id="71">
+        <attvalues>
+          <attvalue for="0" value="false" />
+        </attvalues>
+      </edge>
+      <edge source="Van Kent" target="Smals" id="72">
+        <attvalues>
+          <attvalue for="0" value="true" />
+        </attvalues>
+      </edge>
+      <edge source="Hammelburg" target="Amhaouch" id="73">
+        <attvalues>
+          <attvalue for="0" value="false" />
+        </attvalues>
+      </edge>
+      <edge source="Yeşilgöz-Zegerius" target="Sneller" id="74">
+        <attvalues>
+          <attvalue for="0" value="false" />
+        </attvalues>
+      </edge>
+      <edge source="Michon-Derkzen" target="Six Dijkstra" id="75">
+        <attvalues>
+          <attvalue for="0" value="false" />
+        </attvalues>
+      </edge>
+      <edge source="Romke de Jong" target="Aartsen" id="76">
+        <attvalues>
+          <attvalue for="0" value="true" />
+        </attvalues>
+      </edge>
+      <edge source="Weerwind" target="Ellian" id="77">
+        <attvalues>
+          <attvalue for="0" value="false" />
+        </attvalues>
+      </edge>
+      <edge source="Bosma" target="Dassen" id="78">
+        <attvalues>
+          <attvalue for="0" value="false" />
+        </attvalues>
+      </edge>
+      <edge source="Kamminga" target="Podt" id="79">
+        <attvalues>
+          <attvalue for="0" value="false" />
+        </attvalues>
+      </edge>
+      <edge source="Adriaansens" target="Kröger" id="80">
+        <attvalues>
+          <attvalue for="0" value="false" />
+        </attvalues>
+      </edge>
+      <edge source="Maatoug" target="Vermeer" id="81">
+        <attvalues>
+          <attvalue for="0" value="false" />
+        </attvalues>
+      </edge>
+      <edge source="Maatoug" target="Sneller" id="82">
+        <attvalues>
+          <attvalue for="0" value="false" />
+        </attvalues>
+      </edge>
+      <edge source="Van der Lee" target="Krul" id="83">
+        <attvalues>
+          <attvalue for="0" value="false" />
+        </attvalues>
+      </edge>
+      <edge source="Van der Lee" target="Tielen" id="84">
+        <attvalues>
+          <attvalue for="0" value="false" />
+        </attvalues>
+      </edge>
+    </edges>
+  </graph>
+</gexf>
