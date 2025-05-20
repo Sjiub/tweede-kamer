@@ -17,6 +17,9 @@ CONTENT RULES:
 TASK 1:
 For each statement, determine whether it contains an ad hominem attack and assign a confidence score (0.0 being the lowest and 1.0 the highest) based on the clarity, context, and intent of the attack.
 
+Definition of ad hominem attacks:
+Ad hominem attacks are rhetorical strategies that attempt to discredit or undermine an individual or group by targeting their traits, character, motives, past actions, or affiliations, rather than engaging with their argument.
+
 Examples of ad hominem attacks:
 - "Minister Janssen is either too lazy or too ignorant to read the latest economic report—how can we take his proposals seriously?"
 - "It’s fascinating that someone who struggled to manage a single ministry now feels qualified to lecture us on national reform."

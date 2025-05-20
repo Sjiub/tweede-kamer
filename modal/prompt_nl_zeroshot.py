@@ -17,6 +17,9 @@ INHOUDSREGELS:
 TAAK 1:
 Bepaal voor elke uitspraak of deze een ad hominem aanval bevat en geef een confidence score (0,0 is het laagst en 1,0 het hoogst) op basis van de duidelijkheid, context en intentie van de aanval.
 
+Definitie van ad hominem aanvallen:
+Ad hominem aanvallen zijn retorische strategieën die proberen een individu of groep in diskrediet te brengen of te ondermijnen door zich te richten op hun eigenschappen, karakter, motieven, daden uit het verleden of affiliaties, in plaats van in te gaan op hun argument.
+
 Geef voor elke ad hominem aanval ook:
 - "local_topic": het onderwerp waarover gediscussieerd wordt op het moment van de aanval.
 - "target": de persoon of groep waar de ad hominem op gericht is.

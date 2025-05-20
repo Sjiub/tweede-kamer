@@ -17,6 +17,9 @@ CONTENT RULES:
 TASK 1:
 For each statement, determine whether it contains an ad hominem attack and assign a confidence score (0.0 being the lowest and 1.0 the highest) based on the clarity, context, and intent of the attack.
 
+Definition of ad hominem attacks:
+Ad hominem attacks are rhetorical strategies that attempt to discredit or undermine an individual or group by targeting their traits, character, motives, past actions, or affiliations, rather than engaging with their argument.
+
 For each ad hominem attack, also return:
 - "local_topic": the subject being discussed at the moment of the attack.
 - "target": the person or group the ad hominem is directed at.
