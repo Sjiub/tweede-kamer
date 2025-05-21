@@ -287,20 +287,23 @@ class LLM_TEST:
         import pandas as pd
         from sklearn.metrics import accuracy_score, precision_score, recall_score, f1_score
 
-        self.known_df = self.df.dropna()
+        self.known_df = self.df.dropna(subset="result")
+        if len(self.known_df)==0:
+            print("Error(ish) len of df is 0")
+            return
         self.known_df["predicted"] = self.known_df["result"].apply(self.parse_function)
 
         self.len_unclassified = len(self.known_df[self.known_df["predicted"]== "Unknown"])
         self.known_df  = self.known_df[self.known_df["predicted"] != "Unknown"]
 
         # Now make types consistent
-        self.known_df["truth_label"] = self.known_df[self.truth_lable_name] != "No Ad Hominem"
+        self.known_df[self.truth_lable_name] = self.known_df[self.truth_lable_name] != "No Ad Hominem"
         self.known_df["predicted"] = self.known_df["predicted"] != "No Ad Hominem"
     
-        self.accuracy = accuracy_score(self.known_df["truth_label"], self.known_df["predicted"])
-        self.precision_score = precision_score(self.known_df["truth_label"], self.known_df["predicted"], zero_division=0)
-        self.recall_score = recall_score(self.known_df["truth_label"], self.known_df["predicted"], zero_division=0)
-        self.f1_score = f1_score(self.known_df["truth_label"], self.known_df["predicted"], zero_division=0)
+        self.accuracy = accuracy_score(self.known_df[self.truth_lable_name], self.known_df["predicted"])
+        self.precision_score = precision_score(self.known_df[self.truth_lable_name], self.known_df["predicted"], zero_division=0)
+        self.recall_score = recall_score(self.known_df[self.truth_lable_name], self.known_df["predicted"], zero_division=0)
+        self.f1_score = f1_score(self.known_df[self.truth_lable_name], self.known_df["predicted"], zero_division=0)
 
         print(f"Accuracy: {self.accuracy}")
         print(f"Precision: {self.precision_score}")
@@ -312,7 +315,7 @@ class LLM_TEST:
         import seaborn as sns
         import matplotlib.pyplot as plt
 
-        y_true = self.known_df["truth_label"]
+        y_true = self.known_df[self.truth_lable_name]
         y_pred = self.known_df["predicted"]
 
         # Use boolean labels for computation

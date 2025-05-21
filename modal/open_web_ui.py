@@ -1,10 +1,13 @@
 import modal
-
+from fastapi.responses import HTMLResponse
+from fastapi import FastAPI
+from pydantic import BaseModel
 
 app = modal.App("democracy slap's next top model")
 
 # Initialise volumes
-model_cache = modal.Volume.from_name("ollama-cache", create_if_missing=True)
+model_cache = modal.Volume.from_name("ollama-models", create_if_missing=True)
+ollama_dir = "/opt/ai/models"
 webui_data = modal.Volume.from_name("openwebui-data", create_if_missing=True)
 
 # -------------------- IMAGE -------------------- #
@@ -16,104 +19,92 @@ webui_data = modal.Volume.from_name("openwebui-data", create_if_missing=True)
 # resolve that.
 
 download_image = (
-    modal.Image.from_registry(f"nvidia/cuda:12.1.1-cudnn8-devel-ubuntu22.04", add_python="3.12")
-    .apt_install(
-        "build-essential", "cmake", "git",
-        "python3-dev", "python3-pip",
-        "libopenblas-dev", "libomp-dev", "clang", "gcc", 
-        "curl", "systemctl", "nodejs", "npm"
-    )
-    # Install other deps
-    .pip_install("ollama","open-webui")
-    .run_commands([
-        "curl -fsSL https://ollama.com/install.sh | sh"
-    ])
+    modal.Image.from_registry(f"ghcr.io/ggerganov/llama.cpp:full-cuda", add_python="3.12")
+    .pip_install("fastapi[standard]")
+    .add_local_python_source("woke_llama", copy=True)
+    .env({"LD_LIBRARY_PATH":"/app/:$LD_LIBRARY_PATH"},)
     .entrypoint([])
-    # Add files
-    .add_local_file("ollama.service", remote_path= "/etc/systemd/system/ollama.service")
 )
-open_webui_image = (
-    modal.Image.from_registry("ghcr.io/open-webui/open-webui:main",)
-    .pip_install("open-webui")
-)
+# open_webui_image = (
+#     modal.Image.from_registry("ghcr.io/open-webui/open-webui:main",)
+#     .pip_install("open-webui")
+# )
+
+class GenerateRequest(BaseModel):
+    prompt: str
+    temperature: float = 0.7
+
 @app.function(
     image=download_image, 
-    volumes={"/root/.ollama": model_cache}, 
-    timeout=60 * 10,
-)
-def download_ollama_model(model: str):
-    #https://modal.com/blog/how_to_run_ollama_article
-    print("Enter download ollama model function")
+    volumes={ollama_dir:model_cache},
+    gpu="L4"
+    )
+def inference(messages, params):
+    from woke_llama import Woke_LLama
     import os
-    import subprocess
-    import ollama
+    print("TP 1")
+    # Original long path
+    long_model_path = f'{ollama_dir}/models--Mungert--gemma-3-27b-it-GGUF/blobs/f3b2259712093260f0f5336d879c8270f23429d1693f6ae5b756086d2c695668'
+    # Shorter, safe path for llama.cpp
+    short_model_path = '/app/model.gguf'
 
-    subprocess.run(["systemctl", "start", "ollama"])
+    # Create symlink if it doesn't already exist
+    if not os.path.exists(short_model_path):
+        os.symlink(long_model_path, short_model_path)
 
-    import time
-    time.sleep(1)
-
-    import ollama
-    ollama.pull(model)
-
-@app.function(
-    image=download_image,
-    volumes={"/root/.ollama": model_cache},
-    gpu="L4",
-    timeout=60 * 60,
-)
-@modal.web_server(11434)
-def ollama_server():
-    import subprocess
-    import os
-
-    print("Starting Ollama server...")
-
-    env = os.environ.copy()
-    env["OLLAMA_HOST"] = "0.0.0.0"  # 👈 IMPORTANT
-
-    subprocess.run("OLLAMA_HOST=0.0.0.0 ollama serve", shell=True)
-
-
-@app.function(
-    image=open_webui_image,
-    volumes={"/app/backend/data/persist": webui_data}
-)
-@modal.asgi_app()
-def open_webui():
-    import subprocess
-    import os
-    import sys
-    from open_webui.main import app as webui_app
-    
-    # print("Continue open webui function")
-    # handle = modal.Function.from_name("democracy slap's next top model", "ollama_server")
-
-    #web_url = handle.web_url
-    
-    web_url="https://post-x--democracy-slap-s-next-top-model-ollama-server-dev.modal.run"
-    print("WebUI is available at:", web_url)
-    env = os.environ.copy()
-    env["OLLAMA_BASE_URL"] = web_url
-    env["DATA_DIR"] = "/app/backend/data/persist"
-    env["WEBUI_URL"] = "0.0.0.0"
-    env["WEBUI_SECRET_KEY"] = "very secret"
-    env["GLOBAL_LOG_LEVEL"] = "DEBUG"
-    os.environ = env
-    return webui_app
-    subprocess.run(
-        ["uvicorn", "open_webui.main:app", "--host", "0.0.0.0", "--port", "8080"],
-        cwd="/app/backend",
-        env=env,
-        check=True
+    woke_llama = Woke_LLama(
+        llama_cli_path="/app/llama-cli",
+        gguf_path=short_model_path
     )
 
-@app.function()
-def initialise():
-    print("Initialise interface")
-    model_whislist= [
-        #"mistral-small3.1",
-        "gemma3:1b"
-    ]
-    for model in model_whislist:
-        download_ollama_model.remote(model).get()
+    return woke_llama.inference(
+        messages=messages, verbose=True
+    )
+
+@app.function(image=download_image)
+@modal.asgi_app()
+def fastapi_app():
+    from fastapi import FastAPI, Request
+
+    web_app = FastAPI()
+
+    @web_app.post("/api/chat")
+    async def generate(request: Request):
+        body = await request.body()
+        print("request body:", body)
+        try:
+            json_body = await request.json()
+            print("Parsed JSON:", json_body)
+        except Exception as e:
+            print("Error parsing JSON:", str(e))
+            return {"error": "Invalid JSON"}
+
+        # Example: access individual fields
+        model = json_body.get("model")
+        messages = json_body.get("messages", [])
+        print("Model:", model)
+        print("Messages:", messages)
+
+        data = inference.remote(messages, None)  # You can customize this with actual inputs
+        return {
+            "message": {"content": data["message"]["content"]},
+            "energy": data["energy"]
+        }
+    @web_app.post("/api/generate")
+    def generate(request: Request):
+        data = inference.remote("hi", None)
+        return  {"message": {"content": data["message"]["content"]}, "energy": data["energy"]}
+    @web_app.get("/api/tags")
+    def tag(request: Request):
+        response = []
+        for model in ["gemma3:27b"]:
+            response.append({
+                "name" : model,
+                "model" : model
+            })
+        return {"models": response}
+    @web_app.get("/api/version")
+    def version(request: Request):
+        return {"version": "0.5.1"}
+    return web_app
+

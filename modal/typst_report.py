@@ -84,39 +84,31 @@ class TypstReport:
             if path:
                 self.content += f'#image("{path}")\n\n'
 
-    def add_test(self, test_data, **kwargs):
-        self.content += f"== Test {test_data.get('id', '-')}\n\n"
-
-        if kwargs.get("show_speech", True):
-            speech = escape_for_typst(str(test_data[self.text_key]))
-            self.content += f"*Speech:* {speech}\n\n"
-
-        if kwargs.get("show_true_label", True):
-            self.content += f"*True Label:* {test_data['truth_label']}\n\n"
-
-        if kwargs.get("show_predicted_label", True):
-            self.content += f"*Predicted Label:* {test_data['predicted']}\n\n"
-            true_label = str(test_data.get("truth_label", "")).strip().lower()
-            predicted_label = str(test_data.get("predicted", "")).strip().lower()
-            if predicted_label == true_label:
-                result_type = "Correct"
-            elif predicted_label == "true" and true_label == "false":
-                result_type = "False Positive"
-            elif predicted_label == "false" and true_label == "true":
-                result_type = "False Negative"
-            else:
-                result_type = "Other"
-            self.content += f"*Result:* {result_type}\n\n"
-
-        if kwargs.get("show_clean_output", True):
-            self.content += "*Cleaned Output:*\n\n```json\n"
-            try:
-                result = clean_result(test_data["result"]) if isinstance(test_data["result"], str) else test_data["result"]
-                cleaned = json.dumps(result, indent=2, ensure_ascii=False)
-            except:
-                cleaned = json.dumps(test_data["result"], indent=2, ensure_ascii=False)
-
-            self.content += cleaned + "\n```\n\n"
+    def add_test(self, test_data):
+        """Add a test case to the report without requiring truth labels."""
+        
+        # Add header for this test case
+        self.content += "== Speech Analysis\n\n"
+        
+        # Add speaker and party information
+        self.content += f"*Speaker:* {test_data['Speaker']}\n"
+        self.content += f"*Party:* {test_data['Party']}\n\n"
+        
+        # Add the speech text
+        speech = escape_for_typst(str(test_data['Speech']))
+        self.content += f"*Speech:*\n#quote[{speech}]\n\n"
+        
+        # Add the analysis results
+        self.content += "*Analysis:*\n```json\n"
+        try:
+            result = clean_result(test_data["Result"]) if isinstance(test_data["Result"], str) else test_data["Result"]
+            cleaned = json.dumps(result, indent=2, ensure_ascii=False)
+        except:
+            cleaned = json.dumps(test_data["Result"], indent=2, ensure_ascii=False)
+        self.content += cleaned + "\n```\n\n"
+        
+        # Add separator between test cases
+        self.content += "#line(length: 100%)\n\n"
 
     def save(self, typst_path="report.typ", pdf_path="report.pdf"):
         with open(typst_path, "w", encoding="utf-8") as f:

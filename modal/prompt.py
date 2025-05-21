@@ -2,10 +2,10 @@ from prompt_en_zeroshot import prompt as PROMPT_ZEROSHOT_EN
 from prompt_en_fewshot import prompt as PROMPT_FEWSHOT_EN
 from prompt_en_CCoT import prompt as PROMPT_CCOT_EN
 from prompt_nl_zeroshot import prompt as PROMPT_ZEROSHOT_NL
+from prompt_en_fewshot_without_extras import prompt as PROMPT_ZEROSHOT_WITHOUT_EXTRAS_EN
+from prompt_nl_zeroshot_without_extras import prompt as PROMPT_ZEROSHOT_WITHOUT_EXTRAS_NL
 from prompt_nl_fewshot import prompt as PROMPT_FEWSHOT_NL
 from prompt_nl_CCoT import prompt as PROMPT_CCOT_NL
-from prompt_en import prompt as PROMPT_NOOB_EN
-from prompt_nl import prompt as PROMPT_NOOB_NL
 # Define prompt configurations
 PROMPT_CONFIGS = {
     # English prompts
@@ -34,6 +34,18 @@ PROMPT_CONFIGS = {
         "description": "Zero-shot prompt without examples or reasoning steps (Dutch)",
         "language": "NL"
     },
+    "zeroshot_nl_without_extra": {
+        "prompt": PROMPT_ZEROSHOT_WITHOUT_EXTRAS_NL,
+        "name": "zeroshot",
+        "description": "Zero-shot prompt without examples or reasoning steps (Dutch)",
+        "language": "NL"
+    },
+    "zeroshot_en_without_extra": {
+        "prompt": PROMPT_ZEROSHOT_WITHOUT_EXTRAS_EN,
+        "name": "zeroshot",
+        "description": "Zero-shot prompt without examples or reasoning steps (Dutch)",
+        "language": "EN"
+    },
     "fewshot_nl": {
         "prompt": PROMPT_FEWSHOT_NL,
         "name": "fewshot",
@@ -46,16 +58,4 @@ PROMPT_CONFIGS = {
         "description": "Chain-of-thought prompt with reasoning steps (Dutch)",
         "language": "NL"
     },
-    "noob_en": {
-        "prompt": PROMPT_NOOB_EN,
-        "name": "noob-prompt",
-        "description": "First version of prompt",
-        "language": "EN",
-    },
-    "noob_nl": {
-        "prompt": PROMPT_NOOB_NL,
-        "name": "noob-prompt",
-        "description": "First version of prompt",
-        "language": "NL",
-    }
 }

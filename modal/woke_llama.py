@@ -94,9 +94,9 @@ class Woke_LLama():
             top_p=0.95,
             repeat_penalty=1,
             min_p=0.01,
-            n_gpu_layers=-1,
+            n_gpu_layers=63,
             threads=None,
-            ctx_size=16384,
+            ctx_size=8192,
             seed=3407,
             prio=2,
             timeout=4*60,
@@ -140,7 +140,7 @@ class Woke_LLama():
 
         # Always include this flags
         # TODO flash attention? 
-        cmd += ["-no-cnv", "--flash-attn"]
+        cmd += ["-no-cnv", "--flash-attn", "--no-warmup"]
 
         # Render prompt with Gemma chat format
         prompt = self.render_prompt(messages)

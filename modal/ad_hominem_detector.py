@@ -67,29 +67,37 @@ download_image = (
     .add_local_file("sample_data_dutch.csv", remote_path="/root/sample_data_dutch.csv")
     .add_local_file("merged_annotations.csv", remote_path="/root/merged_annotations.csv")
     .add_local_file("ollama.service", remote_path= "/etc/systemd/system/ollama.service")
-    .add_local_python_source("prompt_en", )
-    .add_local_python_source("prompt_nl", )
     .add_local_python_source("hardware")
     .add_local_python_source("typst_report")
     .add_local_python_source("progress_bar")
     .add_local_python_source("llm_test")
     .add_local_python_source("woke_llama")
-    .add_local_python_source("prompt_en_zeroshot")
+    .add_local_python_source("prompt_en_zeroshot_without_extras")
+    .add_local_python_source("prompt_nl_zeroshot_without_extras")
+    .add_local_python_source("prompt_en_fewshot_without_extras")
+    .add_local_python_source("prompt_nl_fewshot_without_extras")
+    .add_local_python_source("prompt_en_CCoT_without_extras")
+    .add_local_python_source("prompt_en_CCoT_without_extras")
     .add_local_python_source("prompt_en_fewshot")
     .add_local_python_source("prompt_en_CCoT")
     .add_local_python_source("prompt_nl_zeroshot")
+    .add_local_python_source("prompt_en_zeroshot")
     .add_local_python_source("prompt_nl_fewshot")
     .add_local_python_source("prompt_nl_CCoT")
     .add_local_python_source("prompt")
 )
+
+BATCH_SIZE = 0
+TIMEOUT = 0
 
 # -------------------- DOWNLOAD MODEL -------------------- #
 @app.function(
     image=download_image, volumes={ollama_dir: model_cache}, timeout=60 * 10,
 )
 def download_model(llm_test):
-    from huggingface_hub import hf_hub_download
-
+    from huggingface_hub import hf_hub_download, list_repo_files
+    import os
+    import shutil
     # Inputs
     repo_id = llm_test.model
     quantization = llm_test.quant
@@ -100,23 +108,29 @@ def download_model(llm_test):
         (f for f in files if f.endswith(".gguf") and quantization in f),
         None
     )
+    
 
     if gguf_file is None:
         raise ValueError(f"No GGUF file with quantization '{quantization}' found in {repo_id}")
-
+    print(f"GGUF file with quantization '{quantization}' found in {repo_id}")
     # Step 2: Download the model to your custom path
     model_path = hf_hub_download(
         repo_id=repo_id,
         filename=gguf_file,
-        cache_dir=ollama_dir
     )
-
-    print("Model downloaded to:", model_path)
-    return model_path
+    
+    dir_name = repo_id.split("/")[0]
+    path = f"{ollama_dir}/{dir_name}/{gguf_file}"
+    if not os.path.exists(path):
+        # Copy/rename to desired path
+        os.makedirs(f"{ollama_dir}/{dir_name}")
+        shutil.copy(model_path, path)
+        print("Saved as: ", path)
+    return path
 
 @app.function(
     image=download_image,
-    timeout=60 * 60,
+    timeout=10*60*10,
     volumes={
         results_dir: results,
         ollama_dir: model_cache
@@ -192,10 +206,9 @@ def run_pipeline(llm_test, DEBUG=False):
                 query.append(messages)
 
             
-            results = llama_cpp_inference_batch.remote(llm_test.model, query, llm_test.timeout, verbose=False)
+            results = llama_cpp_inference_batch.remote(gguf_path,llm_test.model, query, llm_test.timeout, verbose=False)
             llm_test.write_result(results)
             llm_test.compute_forecast_report(start_time, GPU_INFO, GPU_CONFIG)  
-    
     #Inference executionc
     with ThreadPoolExecutor(max_workers=llm_test.multithreads) as executor:
         futures = [executor.submit(process_batch) for _ in range(llm_test.multithreads)]
@@ -243,7 +256,7 @@ def prep_data(prompt_type, sample_strategy="full", specific_indices=None, sample
     
     elif sample_strategy == "balanced":
         sample_size = sample_size or 10  # Default to 10 if not specified
-        half_size = sample_size // 2
+        half_size = int(sample_size // 2)
         class_0 = df[df['final_label'] == 0].sample(n=half_size)
         class_1 = df[df['final_label'] == 1].sample(n=half_size)
         debate_df = pd.concat([class_0, class_1])
@@ -269,13 +282,15 @@ def prep_data(prompt_type, sample_strategy="full", specific_indices=None, sample
 
 @app.function(
     image=download_image,
-    timeout=60 * 60*2,
+    timeout=60 * 60*6,
     volumes={
         results_dir: results,
         ollama_dir: model_cache
         },
     )
 def run_all_evaluations():
+    global BATCH_SIZE
+    global TIMEOUT
     import pandas as pd
     # from key import hf_token
     from llm_test import LLM_TEST
@@ -295,36 +310,48 @@ def run_all_evaluations():
         except Exception as e:
             # Optional: print(e) for debugging
             return "Unknown"
-    # Initialise the test, this is for datasharing between methods and is purly cosmetic ;)     
-    llm_test = LLM_TEST( 
-        prompt=prompt_config['prompt'], 
-        df=df, 
-        system_prompt="Je bent een neutrale, getrainde expert in politieke discoursanalyse en drogredendetectie. Je eerste taak is het identificeren van ad-hominem aanvallen, met behulp van expert-niveau redenering en transparantie.",#"You are an expert in analyzing political texts. Analyze the text below for ad-hominem attacks.",
-        text_key="speech_text",
-        truth_lable_name="final_label",
-        parse_function=extract_predicted_label, 
-        model="unsloth/gemma-3-27b-it-GGUF",
-        hf_token="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",
-        quant="Q4_K_M",
-        dataset_nick_name=f"tweede_kamer_debate",
-        
-        prompt_nick_name="ccot_nl", 
-        # howmany rows are being feed into the llm at once
-        row_count=1,
-        # How many element should be in a batch
-        batch_size=10,
-        # In how many threads/container the program should run
-        multithreads=1,
-        dir_path="/root/results",
-        timeout=4*60
-    )
+    # Initialise the test
+    # First one: "ccot_nl", "ccot_en"
+    df, prompt_config, strategy_suffix, prompt_type = prep_data(prompt_type="ccot_nl", sample_strategy="balanced", sample_size=48)    
+    prompts = ["ccot_nl", "ccot_en"]
+    for prompt in prompts:
+        _df, prompt_config, strategy_suffix, prompt_type = prep_data(prompt_type=prompt, sample_strategy="full", sample_size=10)    
+        if prompt_config["language"] == "EN":
+            sys_prompt = "You are an expert in analyzing political texts. Analyze the text below for ad-hominem attacks."
+        else:
+            sys_prompt = "Je bent een neutrale, getrainde expert in politieke discoursanalyse en drogredendetectie. Je eerste taak is het identificeren van ad-hominem aanvallen, met behulp van expert-niveau redenering en transparantie."
+        llm_test = LLM_TEST( 
+            prompt=prompt_config['prompt'], 
+            df=df, 
+            system_prompt= sys_prompt,
+            text_key="speech_text",
+            truth_lable_name="final_label",
+            parse_function=extract_predicted_label, 
+            model="unsloth/gemma-3-27b-it-GGUF",
+            hf_token="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",
+            quant="Q4_K_M",
+            dataset_nick_name=f"tweede_kamer_debate",
+            
+            prompt_nick_name=prompt_config['name'], 
+            # howmany rows are being feed into the llm at once
+            row_count=1,
+            # How many element should be in a batch
+            batch_size=10,
+            # In how many threads/container the program should run
+            multithreads=5,
+            dir_path="/root/results",
+            timeout=10*60
+        )
+        BATCH_SIZE = llm_test.batch_size
+        TIMEOUT = llm_test.timeout
+        run_pipeline(llm_test)
     # Money before run 4981.54$ -> 4980.84 in reality. Program thought 0.36
     # Second was 4978.73
 
     # Big run 4972.49$ 
     # Big run 2 4951.36
     # test execution
-    run_pipeline(llm_test)
+    
 
 @app.local_entrypoint()
 def main():
