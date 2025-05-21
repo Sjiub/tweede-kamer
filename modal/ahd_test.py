@@ -53,26 +53,27 @@ def define_test():
     df, prompt_config, strategy_suffix, prompt_type = prep_data(prompt_type="ccot_nl", sample_strategy="balanced", sample_size=10)#48)#specific_indices=[71, 72, prep_data(prompt_type="ccot_nl", sample_strategy="random", sample_size=200)#specific_indices=[71, 72, 73, 773, 74, 75])
     def parse_function():
         pass
-    llm_test = LLM_TEST( 
+    llm_test =  LLM_TEST( 
         prompt=prompt_config['prompt'], 
         df=df, 
-        system_prompt="Je bent een neutrale, getrainde expert in politieke discoursanalyse en drogredendetectie. Je eerste taak is het identificeren van ad-hominem aanvallen, met behulp van expert-niveau redenering en transparantie.",#"You are an expert in analyzing political texts. Analyze the text below for ad-hominem attacks.",
+        system_prompt= "sys_prompt",
         text_key="speech_text",
         truth_lable_name="final_label",
         parse_function=parse_function, 
-        model="Mungert/gemma-3-27b-it-GGUF",#"mistral-small3.1", 
-        ollama=False,
+        model="unsloth/gemma-3-27b-it-GGUF",
         hf_token="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",
         quant="Q4_K_M",
         dataset_nick_name=f"tweede_kamer_debate",
         
-        prompt_nick_name="ccot_nl", 
+        prompt_nick_name=prompt_config['name'], 
         # howmany rows are being feed into the llm at once
         row_count=1,
+        # Text that are longer will be computed on bigger gpu
+        max_text_length=6000,
         # How many element should be in a batch
         batch_size=10,
         # In how many threads/container the program should run
-        multithreads=2,
+        multithreads=1,
         dir_path="/root/results",
         timeout=4*60
     )
@@ -158,13 +159,35 @@ def check_compute_sampling(llm_test):
 
     # But now it has to be empty!
     val = llm_test.get_compute_batch(1)
-    assert len(val) == 0,  f"Error indices should be empty but contains a value {val}"
+    assert all(len(idx) == 0 for idx in val), f"Error indices should be empty but contains a value {val}"
+
     print("Check compute ok")
 def timeout_check():
     pass
-def text_length():
-    # Test extrem case for inputs
-    pass
+def check_text_length():
+    from ad_hominem_detector import run_pipeline
+    def fetch_complex_text(min_length=10000):
+        import requests
+        from bs4 import BeautifulSoup
+        url = "https://en.wikisource.org/wiki/The_Origin_of_Species_(1872)"
+        response = requests.get(url)
+        soup = BeautifulSoup(response.text, "html.parser")
+
+        # Extract paragraphs and join into a single text
+        paragraphs = soup.find_all("p")
+        full_text = "\n\n".join(p.get_text() for p in paragraphs)
+
+        # Filter long enough and return
+        if len(full_text) >= min_length:
+            return full_text[:min_length + 1000]  # optionally clip to target + buffer
+        else:
+            raise ValueError("Fetched text is too short.")
+    llm_test = define_test()
+    llm_test.df = llm_test.df.head(1)
+    llm_test.df[llm_test.text_key][0] = fetch_complex_text(10000) 
+    run_pipeline(llm_test)
+    assert llm_test.df["is_timeout"][0] == False, "Error long text didnt run"
+    print("check long text ok")
 def llm_outputs():
     # test if json format output is correct
     pass
@@ -204,3 +227,4 @@ def root_function():
     llm_test = define_test()
     check_compute_sampling(llm_test=llm_test)
     check_write_block(llm_test=llm_test)
+    check_text_length()

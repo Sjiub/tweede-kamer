@@ -45,7 +45,7 @@ download_image = (
     # Install other deps
     .pip_install("torch","pandas", "numpy", "huggingface_hub[hf_transfer]==0.26.2",
         "transformers", "sentencepiece", "scikit-learn", "seaborn", "matplotlib", 
-        "fpdf2", "ollama", "langdetect", "pytest", "jinja2")
+        "fpdf2", "ollama", "langdetect", "pytest", "jinja2",  "beautifulsoup4", "lxml")
     .apt_install("curl", "systemctl")
     .run_commands([
         "curl  -fsSL https://ollama.com/install.sh | sh"
@@ -155,6 +155,33 @@ def llama_cpp_inference_batch(model_path,llm, list_msg, timeout, verbose=True, t
 
     return responses
 
+@app.function(
+    image=download_image,
+    timeout=4*60*10,
+    volumes={
+        results_dir: results,
+        ollama_dir: model_cache
+        },
+    gpu="A100-80GB")
+def large_llama_cpp_inference_batch(model_path,llm, list_msg, timeout, verbose=True, temperature=0):
+    from woke_llama import Woke_LLama
+
+
+    woke_llama = Woke_LLama(
+        llama_cli_path="/app/llama-cli",
+        gguf_path=model_path
+    )
+
+    responses = []
+    for messages in list_msg:
+        result = woke_llama.inference(messages=messages, timeout=timeout, verbose=verbose, temperature=0, ctx_size=128000)
+        result["index"] = messages[-1]["index"]
+        result["is_timeout"] = result["status"] == -1
+        result["raw"] = result
+        responses.append(result)
+
+    return responses
+
 # -------------------- EVALUATE -------------------- #
 def run_pipeline(llm_test, DEBUG=False):
     import pandas as pd
@@ -203,7 +230,13 @@ def run_pipeline(llm_test, DEBUG=False):
                     for row in rows[llm_test.text_key]
                 ])
 
-                query.append(messages)
+                # Handle text's that have a very large size, eg. see notebook sampling. 
+                # This way we could fit a harry potter book into the model as its hosted on a different gpu.
+                if rows["text_length"].max() >= llm_test.max_text_length:
+                    large_llama_cpp_inference_batch.remote(gguf_path,llm_test.model, [messages], llm_test.timeout, verbose=False)
+                    llm_test.write_result(results)
+                else:
+                    query.append(messages)
 
             
             results = llama_cpp_inference_batch.remote(gguf_path,llm_test.model, query, llm_test.timeout, verbose=False)
@@ -219,7 +252,6 @@ def run_pipeline(llm_test, DEBUG=False):
             except Exception as e:
                 print(f"A thread failed with error: {e}")
             
-    llm_test.compute_results()
     llm_test.generate_tk_report(start_time, GPU_INFO, GPU_CONFIG )#power_samples)
     return llm_test
 
@@ -248,6 +280,9 @@ def prep_data(prompt_type, sample_strategy="full", specific_indices=None, sample
 
     # Load dataset
     df = pd.read_csv("merged_annotations.csv", sep=";")
+
+    # Add text length
+    df['text_length'] = df['speech_text'].astype(str).apply(len)
 
     # Sample selection based on strategy
     if sample_strategy == "full":
@@ -289,13 +324,9 @@ def prep_data(prompt_type, sample_strategy="full", specific_indices=None, sample
         },
     )
 def run_all_evaluations():
-    global BATCH_SIZE
-    global TIMEOUT
     import pandas as pd
     # from key import hf_token
     from llm_test import LLM_TEST
-
-    df, prompt_config, strategy_suffix, prompt_type = prep_data(prompt_type="ccot_nl", sample_strategy="full", sample_size=10)#specific_indices=[71, 72, prep_data(prompt_type="ccot_nl", sample_strategy="random", sample_size=200)#specific_indices=[71, 72, 73, 773, 74, 75])
 
     def extract_predicted_label(result):
         json
@@ -311,40 +342,39 @@ def run_all_evaluations():
             # Optional: print(e) for debugging
             return "Unknown"
     # Initialise the test
-    # First one: "ccot_nl", "ccot_en"
-    df, prompt_config, strategy_suffix, prompt_type = prep_data(prompt_type="ccot_nl", sample_strategy="balanced", sample_size=48)    
-    prompts = ["ccot_nl", "ccot_en"]
-    for prompt in prompts:
-        _df, prompt_config, strategy_suffix, prompt_type = prep_data(prompt_type=prompt, sample_strategy="full", sample_size=10)    
-        if prompt_config["language"] == "EN":
-            sys_prompt = "You are an expert in analyzing political texts. Analyze the text below for ad-hominem attacks."
-        else:
-            sys_prompt = "Je bent een neutrale, getrainde expert in politieke discoursanalyse en drogredendetectie. Je eerste taak is het identificeren van ad-hominem aanvallen, met behulp van expert-niveau redenering en transparantie."
-        llm_test = LLM_TEST( 
-            prompt=prompt_config['prompt'], 
-            df=df, 
-            system_prompt= sys_prompt,
-            text_key="speech_text",
-            truth_lable_name="final_label",
-            parse_function=extract_predicted_label, 
-            model="unsloth/gemma-3-27b-it-GGUF",
-            hf_token="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",
-            quant="Q4_K_M",
-            dataset_nick_name=f"tweede_kamer_debate",
-            
-            prompt_nick_name=prompt_config['name'], 
-            # howmany rows are being feed into the llm at once
-            row_count=1,
-            # How many element should be in a batch
-            batch_size=10,
-            # In how many threads/container the program should run
-            multithreads=5,
-            dir_path="/root/results",
-            timeout=10*60
-        )
-        BATCH_SIZE = llm_test.batch_size
-        TIMEOUT = llm_test.timeout
-        run_pipeline(llm_test)
+    df, prompt_config, strategy_suffix, prompt_type = prep_data(prompt_type="fewshot_en", sample_strategy="full") 
+
+    if prompt_config["language"] == "EN":
+        sys_prompt = "You are an expert in analyzing political texts. Analyze the text below for ad-hominem attacks."
+    else:
+        sys_prompt = "Je bent een neutrale, getrainde expert in politieke discoursanalyse en drogredendetectie. Je eerste taak is het identificeren van ad-hominem aanvallen, met behulp van expert-niveau redenering en transparantie."
+    
+    llm_test = LLM_TEST( 
+        prompt=prompt_config['prompt'], 
+        df=df, 
+        system_prompt= sys_prompt,
+        text_key="speech_text",
+        truth_lable_name="final_label",
+        parse_function=extract_predicted_label, 
+        model="unsloth/gemma-3-27b-it-GGUF",
+        hf_token="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",
+        quant="Q4_K_M",
+        dataset_nick_name=f"tweede_kamer_debate",
+        
+        prompt_nick_name=prompt_config['name'], 
+        # howmany rows are being feed into the llm at once
+        row_count=1,
+        # Text that are longer will be computed on bigger gpu
+        max_text_length=6000,
+        # How many element should be in a batch
+        batch_size=10,
+        # In how many threads/container the program should run
+        multithreads=10,
+        dir_path="/root/results",
+        filename="21_may_final",
+        timeout=4*60
+    )
+    run_pipeline(llm_test)
     # Money before run 4981.54$ -> 4980.84 in reality. Program thought 0.36
     # Second was 4978.73
 

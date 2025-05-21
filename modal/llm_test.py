@@ -15,7 +15,7 @@ class LLM_TEST:
 
     def __init__(self, prompt=None, df=None, parse_function=None, system_prompt=None, model=None, quant=None, ollama=False,
                  hf_token=None, dataset_nick_name=None, prompt_nick_name=None, text_key="Speech", row_range=None, row_count=None, 
-                 multithreads=1, TIME_ZONE = "Europe/Amsterdam", timeout=60 * 3, batch_size=10, dir_path=None, truth_lable_name=None):
+                 multithreads=1, TIME_ZONE = "Europe/Amsterdam", timeout=60 * 3, batch_size=10, dir_path=None, truth_lable_name=None, max_text_length=6000, filename=None):
 
         self.prompt = prompt
         self.df = df
@@ -36,6 +36,8 @@ class LLM_TEST:
         self.batch_size = batch_size
         self.dir_path = dir_path
         self.truth_lable_name = truth_lable_name
+        self.max_text_length = max_text_length
+        self.filename = filename
 
         
 
@@ -141,6 +143,127 @@ class LLM_TEST:
             return sample.index, available_df.index
 
         return self.write_df(manipulation, batch_size)
+    # Function to check if a row contains an error
+    @staticmethod
+    def check_error(result_str):
+        try:
+            result_dict = ast.literal_eval(result_str) if isinstance(result_str, str) else result_str
+            if isinstance(result_dict, dict) and result_dict.get('status') == 'error':
+                return True
+            return False
+        except:
+            return True  # If we can't parse it, consider it an error
+    # Function to analyze a single CSV file
+
+    def analyze_csv(self):     
+        try:     
+            df = self.df
+            
+            # Check if we have the expected columns
+            required_cols = ['result', 'is_timeout', 'final_label']
+            missing_cols = [col for col in required_cols if col not in df.columns]
+            
+            if missing_cols:
+                # Try with comma delimiter if semicolon didn't work correctly
+                missing_cols = [col for col in required_cols if col not in df.columns]
+                
+                if missing_cols:
+                    print(f"Error: Missing required columns {missing_cols}")
+                    return None
+            
+            df["result"] = df["result"].apply(self.clean_result)
+            df["count"] = df["result"].apply(self.extract_predicted_label)
+            # Find rows with errors or timeouts
+            timeout_rows = df[df['is_timeout'] == 1]
+            error_rows = df[df['result'].apply(check_error)]
+
+        
+
+            # Print excluded rows
+            print("Rows excluded due to timeout:")
+            if len(timeout_rows) > 0:
+                print(timeout_rows[['index', 'file_id', 'speaker_name']].head())
+                if len(timeout_rows) > 5:
+                    print(f"...and {len(timeout_rows) - 5} more")
+            else:
+                print("None")
+
+            print("\nRows excluded due to errors:")
+            if len(error_rows) > 0:
+                print(error_rows[['index', 'file_id', 'speaker_name']].head())
+                if len(error_rows) > 5:
+                    print(f"...and {len(error_rows) - 5} more")
+            else:
+                print("None")
+
+            print("\nRows excluded due to not containing a label: ")
+            if len(df) != len(df.dropna(subset=self.truth_lable_name)):
+                print(f"excluded: {df - len(df.dropna(subset=self.truth_lable_name))}")
+                df = df.dropna(subset=self.truth_lable_name)
+
+            # Filter out rows where is_timeout is 1 or result contains an error
+            df_filtered = df[(df['is_timeout'] != 1) & (~df['result'].apply(check_error))]
+
+            # Print summary of excluded rows
+            total_rows = len(df)
+            excluded_rows = total_rows - len(df_filtered)
+            print(f"\nTotal rows in dataset: {total_rows}")
+            print(f"Total rows excluded: {excluded_rows} ({excluded_rows/total_rows:.2%})")
+            print(f"Remaining rows for analysis: {len(df_filtered)}")
+
+            # Extract the ground truth labels (1 for ad hominem, 0 for not ad hominem)
+            y_true = df_filtered['final_label'].values
+
+            # Extract the predicted labels (1 if LLM found ad hominem, 0 otherwise)
+            y_pred = df_filtered['count'].apply(lambda x: 1 if x > 0 else 0).values
+
+            # Calculate metrics
+            self.accuracy = accuracy_score(y_true, y_pred) * 100
+            self.precision = precision_score(y_true, y_pred, zero_division=0) * 100
+            self.recall = recall_score(y_true, y_pred, zero_division=0) * 100
+            self.f1 = f1_score(y_true, y_pred, zero_division=0) * 100
+
+
+            # Print metrics
+            print(f"\nAccuracy: {self.accuracy:.2f}%")
+            print(f"Precision: {self.precision:.2f}%")
+            print(f"Recall: {self.recall:.2f}%")
+            print(f"F1 Score: {self.f1:.2f}%")
+
+            # Generate and print confusion matrix
+            cm = confusion_matrix(y_true, y_pred)
+            print("\nConfusion Matrix:")
+            print(f"True Negative: {cm[0][0]}")
+            print(f"False Positive: {cm[0][1]}")
+            print(f"False Negative: {cm[1][0]}")
+            print(f"True Positive: {cm[1][1]}")
+            
+            # Visualize the confusion matrix
+            plt.figure(figsize=(10, 7))
+            sns.heatmap(cm, annot=True, fmt='d', cmap='Blues',
+                        xticklabels=['No Ad Hominem', 'Ad Hominem'],
+                        yticklabels=['No Ad Hominem', 'Ad Hominem'])
+            plt.xlabel('Predicted')
+            plt.ylabel('Actual')
+            plt.title(f'Confusion Matrix for labled data')
+            plt.tight_layout()
+            plt.show()
+            
+            # Return metrics for sorting later
+            return {
+                'accuracy': accuracy,
+                'precision': precision,
+                'recall': recall,
+                'f1': f1,
+                'confusion_matrix': cm,
+            }
+        except Exception as e:
+            print(f"Error processing {e}")
+            self.accuracy = 0
+            self.precision = 0
+            self.recall = 0
+            self.f1 = 0
+            return None
 
     def compute_forecast_report(self, start_time, GPU_INFO, GPU_CONFIG):
         import time
@@ -214,13 +337,22 @@ class LLM_TEST:
         print("second output:", self.output)
         assert self.output != None, "Output is missing. Did the test run successfully?"
         return self.output
-    def generate_file_name(self, dir_path, file_type:str):
+    def generate_file_name(self, dir_path, file_type: str):
         from datetime import datetime
         from zoneinfo import ZoneInfo
         import os
-        now=datetime.now(ZoneInfo(self.TIME_ZONE)).strftime("%Y-%m-%d %H:%M:%S")
-        path = f"results_{self.prompt_language}_{self.dataset_language}_{self.model}_{now}.{file_type}".replace("/","_")
-        out_path = os.path.join(dir_path,path)
+
+        now = datetime.now(ZoneInfo(self.TIME_ZONE)).strftime("%Y-%m-%d %H:%M:%S")
+        if self.filename == None:
+            filename = f"results_{self.prompt_language}_{self.dataset_language}_{self.model}_{now}.{file_type}".replace("/", "_")
+            out_path = os.path.join(dir_path, filename)
+        else:
+            filename = f"{self.filename}.{file_type}"
+            # Ensure 'final' directory exists
+            final_dir = os.path.join(dir_path, "final")
+            os.makedirs(final_dir, exist_ok=True)
+
+            out_path = os.path.join(final_dir, filename)
         return out_path
     @staticmethod
     def clean_result(text: str):
@@ -364,7 +496,7 @@ class LLM_TEST:
         import time
 
         report = TypstReport(self.text_key)
-        confusion_matrix_path = self.plot_confusion_matrix(path=f'confusion_matrix.png')
+        #confusion_matrix_path = self.plot_confusion_matrix(path=f'confusion_matrix.png')
         #plot_power_path = self.plot_power_samples(power_samples, output_path=f'power_plot.png')
 
         params = self.compute_forecast_report(start_time=start_time, GPU_INFO=GPU_INFO, GPU_CONFIG=GPU_CONFIG)
@@ -391,44 +523,72 @@ class LLM_TEST:
                 ("n tests", len(self.df)),
                 ("Electricity Usage (W)", f"{self.energy:.2f}")
             ]
-        report.add_general_info(info,[confusion_matrix_path])# plot_power_path])
+        report.add_general_info(info,[])# plot_power_path])
 
-        self.df["cleaned_output"] = self.df["result"]
-        for _, test in self.known_df.iterrows():
-            report.add_test(test)
+        # self.df["cleaned_output"] = self.df["result"]
+        # for _, test in self.known_df.iterrows():
+        #     report.add_test(test)
         path = f"results_{self.prompt_language}_{self.dataset_language}_{self.model}_{now}".replace("/","_")
         print("dir_path: ", self.dir_path, "path: ", path)
         out_path = os.path.join(self.dir_path, path)
         report.save(f"{out_path}.typ", f"{out_path}.pdf")
 
-    def do_runtime_stats():
-        new_df = self.df.dropna(subset=["raw"])
-        new_df["runtime"] = new_df["raw"].apply(self.clean_result)["runtime"]
-        
-    def do_inference_stats():
-        # Extract relevant runtime info from any row
-        runtime_info = self.df["raw"].iloc[0].get("message", {}).get("runtime", {})
 
-        inference_stats = [
-            ("Prompt tokens", runtime_info.get("prompt_tokens")),
-            ("Generation tokens", runtime_info.get("generation_tokens")),
-            ("Total tokens", runtime_info.get("total_tokens")),
-            ("Prompt time (ms)", runtime_info.get("prompt_time_ms")),
-            ("Generation time (ms)", runtime_info.get("generation_time_ms")),
-            ("Total time (ms)", runtime_info.get("total_time_ms")),
-            ("Tokens/sec (prompt)", round(runtime_info.get("prompt_tokens", 0) / (runtime_info.get("prompt_time_ms", 1) / 1000), 2)),
-            ("Tokens/sec (generation)", round(runtime_info.get("generation_tokens", 0) / (runtime_info.get("generation_time_ms", 1) / 1000), 2)),
-            ("Model GGUF Version", runtime_info.get("gguf_version")),
-            ("Model File Type", runtime_info.get("file_type")),
-            ("Quantization Version", runtime_info.get("quantization_version")),
-            ("Layers Offloaded", f"{runtime_info.get('layers_offloaded', 0)} / {runtime_info.get('total_layers', '?')}"),
-            ("Batch Size", runtime_info.get("n_batch")),
-            ("Context Size", runtime_info.get("n_ctx")),
-            ("UBatch Size", runtime_info.get("n_ubatch")),
-            ("KV Size", runtime_info.get("kv_size")),
+    def do_runtime_stats(self):
+        from collections import Counter
+        new_df = self.df.dropna(subset=["raw"])
+
+        def extract_runtime(row):
+            try:
+                return row["message"]["runtime"]
+            except (TypeError, KeyError):
+                return {}
+
+        # Extract all runtime dicts
+        runtimes = new_df["raw"].apply(extract_runtime).tolist()
+        runtimes = [rt for rt in runtimes if rt]
+
+        if not runtimes:
+            return [], [], {}
+
+        # Aggregate prompt-dependent fields
+        prompt_fields = [
+            "prompt_tokens", "generation_tokens", "total_tokens",
+            "prompt_time_ms", "generation_time_ms", "total_time_ms"
         ]
 
-        return inference_stats
+        prompt_aggregates = []
+        for field in prompt_fields:
+            values = [rt.get(field, 0) for rt in runtimes]
+            mean_value = sum(values) / len(values)
+            prompt_aggregates.append((field.replace("_", " ").title(), round(mean_value, 2)))
+
+        # Add throughput calculations
+        avg_prompt_tokens = sum(rt.get("prompt_tokens", 0) for rt in runtimes) / len(runtimes)
+        avg_prompt_time = sum(rt.get("prompt_time_ms", 1) for rt in runtimes) / len(runtimes)
+        avg_gen_tokens = sum(rt.get("generation_tokens", 0) for rt in runtimes) / len(runtimes)
+        avg_gen_time = sum(rt.get("generation_time_ms", 1) for rt in runtimes) / len(runtimes)
+
+        throughput_stats = [
+            ("Tokens/sec (prompt)", round(avg_prompt_tokens / (avg_prompt_time / 1000), 2)),
+            ("Tokens/sec (generation)", round(avg_gen_tokens / (avg_gen_time / 1000), 2))
+        ]
+
+        # Environment info from the first valid row (assumed constant)
+        env_fields = [
+            "gguf_version", "file_type", "quantization_version", "file_size_gib",
+            "bits_per_weight", "layers_offloaded", "total_layers",
+            "n_batch", "n_ctx", "n_ubatch", "kv_size"
+        ]
+        env_runtime = runtimes[0]
+        environment_info = [(field.replace("_", " ").title(), env_runtime.get(field)) for field in env_fields]
+
+        # GPU breakdown (count how many for each type)
+        gpu_counter = Counter(rt.get("gpu_device", "Unknown") for rt in runtimes)
+        gpu_usage_summary = dict(gpu_counter)
+
+        return prompt_aggregates + throughput_stats, environment_info, gpu_usage_summary
+
 
 
     def generate_tk_report(self, start_time,GPU_INFO, GPU_CONFIG):
@@ -441,7 +601,8 @@ class LLM_TEST:
         report = TypstReport(self.text_key)
         prompt_hash = str(get_prompt_hash(self.prompt))
         now = datetime.now(ZoneInfo(self.TIME_ZONE)).strftime("%Y-%m-%d %H:%M:%S")
-        confusion_matrix_path = self.plot_confusion_matrix(path=f'confusion_matrix.png')
+        self.analyze_csv()
+        #confusion_matrix_path = self.plot_confusion_matrix(path=f'confusion_matrix.png')
         params = self.compute_forecast_report(start_time=start_time, GPU_INFO=GPU_INFO, GPU_CONFIG=GPU_CONFIG)
 
         self.duration = time.time() - start_time
@@ -474,47 +635,22 @@ class LLM_TEST:
             ("n tests", len(self.df)),
             ("Timeouts", timeout_count),
             ("Accuracy", f"{self.accuracy * 100:.1f}%"),
-           ("Precision", f"{self.precision_score * 100:.1f}%"),
-           ("Recall", f"{self.recall_score * 100:.1f}%"),
-           ("F1 Score", f"{self.f1_score * 100:.1f}%")
+           ("Precision", f"{self.precision * 100:.1f}%"),
+           ("Recall", f"{self.recall * 100:.1f}%"),
+           ("F1 Score", f"{self.f1 * 100:.1f}%")
         ]
+         # Add runtime statistics and GPU breakdown
+        prompt_stats, environment_info, gpu_usage_summary = self.do_runtime_stats()
+        info += prompt_stats
+        info += [("Environment - " + k, v) for k, v in environment_info]
+        info.append(("GPU Config (provided)", GPU_CONFIG))
+        for gpu_name, count in gpu_usage_summary.items():
+            info.append((f"GPU Usage - {gpu_name}", count))
         #Convert graph paths to relative paths
         #relative_graph_paths = [os.path.basename(path) for path in graph_paths if path]
-        report.add_general_info(info, [confusion_matrix_path])
+        report.add_general_info(info, [])
 
-        # Process each speech for the report with special handling for timeouts
-        for _, speech in self.df.iterrows():
-            result_to_display = None
-            
-            # Handle timeout cases
-            if speech["is_timeout"]:
-                result_to_display = {
-                    "status": "timeout",
-                    "raw_result": {
-                        "timeout_error": "Inference timed out",
-                        "is_timeout": True
-                    }
-                }
-            else:
-                # For non-timeout cases, try to clean the result
-                try:
-                    result_to_display = self.clean_result(speech["result"]) if isinstance(speech["result"], str) else speech["result"]
-                except Exception:
-                    result_to_display = {
-                        "status": "error",
-                        "raw_result": {
-                            "parsing_error": "Unable to parse JSON output",
-                            "raw_output": str(speech["result"])[:500] + "..." if len(str(speech["result"])) > 500 else str(speech["result"])
-                        }
-                    }
-            
-            report.add_test({
-                "Speech": speech["speech_text"],
-                "Speaker": speech["speaker_name"],
-                "Party": speech["speaker_party"],
-                "Result": result_to_display
-            })
-        path = f"report_tk_debate_{self.prompt_language}_{self.dataset_language}_{self.model}_{now}".replace("/","_")
+        path = f"Final_{self.prompt_language}_{self.dataset_language}_{self.model}_{now}".replace("/","_")
         print("dir_path: ", self.dir_path)
         print("path: ", path)
         out_path = os.path.join(self.dir_path, path)
